@@ -145,7 +145,7 @@ class DeepQLearningAgentSingle:
                           f"Packet Loss Ratio: [{packet_loss_ratio:.4f}]")
                 self.save_model(save_path)
                 if (i + 1) == 100000:
-                    self.plot_progress(reward_history, "single_user_progress_at_100k.png")
+                    self.plot_progress(reward_history, "single_user_progress_at_100k_0.png")
         final_packet_loss_ratio = total_packets_lost / total_packets_arrived if total_packets_arrived > 0 else 0
         final_avg_loss = np.mean(loss_history) if loss_history else 0
         self.save_model(save_path)
@@ -155,9 +155,9 @@ class DeepQLearningAgentSingle:
         return total_reward / T
 
 if __name__ == "__main__":
-    agent = DeepQLearningAgentSingle(load_path="single_user_checkpoint.pth")
+    agent = DeepQLearningAgentSingle(load_path="single_user_checkpoint_0.pth")
     avg_reward_single = agent.train(
-        save_path="single_user_checkpoint.pth",
-        plot_path="single_user_training_progress.png"
+        save_path="single_user_checkpoint_0.pth",
+        plot_path="single_user_training_progress_0.png"
     )
     print(f"Single-user average reward: {avg_reward_single:.4f}")

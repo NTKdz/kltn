@@ -119,6 +119,7 @@ import numpy as np
 import random
 from scipy.stats import poisson
 
+
 class Environment:
     def __init__(self, num_users=num_users):
         self.num_users = num_users
@@ -133,7 +134,8 @@ class Environment:
         j = self.jammer_state
         d = self.data_states[user_idx]
         e = self.energy_states[user_idx]
-        state_idx = j * (d_queue_size + 1) * (e_queue_size + 1) + d * (e_queue_size + 1) + e
+        state_idx = j * (d_queue_size + 1) * (e_queue_size +
+                                              1) + d * (e_queue_size + 1) + e
         assert 0 <= state_idx < num_states, f"Invalid state_idx {state_idx}"
         return state_idx
 
@@ -166,15 +168,15 @@ class Environment:
     def calculate_reward(self, actions):
         rewards = [0] * self.num_users
         losses = [0] * self.num_users
-        active_users = sum(1 for a in actions if a in [1, 4, 5, 6])
+        active_users = sum(1 for a in actions if a in [1, 3, 4, 5, 6])
         interference = active_users > 1
-        # print(f"Active users: {active_users}, Interference: {interference}")
         for i, action in enumerate(actions):
             if action == 0:
                 rewards[i] = 0
             elif action == 1:
                 rewards[i] = self.active_transmit(i, d_t)
                 if interference:
+                    losses[i] = rewards[i] - rewards[i] / active_users
                     rewards[i] /= active_users
             elif action == 2:
                 rewards[i] = random.choices(e_hj_arr, nu_p, k=1)[0]
@@ -182,17 +184,27 @@ class Environment:
                 d_bj = random.choices(d_bj_arr, nu_p, k=1)[0]
                 max_rate = min(b_dagger, self.data_states[i])
                 rewards[i] = min(d_bj, self.data_states[i])
+
                 if max_rate > rewards[i]:
                     losses[i] = max_rate - rewards[i]
+
+                if interference:
+                    # rewards[i] /= active_users
+                    losses[i] = rewards[i] - rewards[i] / active_users
+                    rewards[i] /= active_users
             elif action in [4, 5, 6]:
                 max_ra = random.choices(dt_ra_arr, nu_p, k=1)[0]
                 idx = action - 4
                 rewards[i] = self.active_transmit(i, dt_ra_arr[idx])
                 if interference:
+                    # rewards[i] /= active_users
+                    losses[i] = rewards[i] - rewards[i] / active_users
                     rewards[i] /= active_users
                 if dt_ra_arr[idx] > max_ra:
                     losses[i] = rewards[i]
                     rewards[i] = 0
+        print(f"Active users: {active_users}, Action: {actions}, Reward: {rewards}, Loss: {losses}")
+
         return rewards, losses
 
     def step(self, actions):
@@ -202,11 +214,14 @@ class Environment:
         packets_lost = [0] * self.num_users
         for i, (action, reward, loss) in enumerate(zip(actions, rewards, losses)):
             if action == 1:
-                self.data_states[i] = max(0, self.data_states[i] - reward)
-                self.energy_states[i] = max(0, self.energy_states[i] - reward * e_t)
+                self.data_states[i] = max(
+                    0, self.data_states[i] - reward - loss)
+                self.energy_states[i] = max(
+                    0, self.energy_states[i] - reward * e_t)
             elif action == 2:
                 if self.energy_states[i] < e_queue_size:
-                    self.energy_states[i] = min(e_queue_size, self.energy_states[i] + reward)
+                    self.energy_states[i] = min(
+                        e_queue_size, self.energy_states[i] + reward)
                 rewards[i] = 0
             elif action == 3:
                 max_rate = min(b_dagger, self.data_states[i])
@@ -215,9 +230,11 @@ class Environment:
             elif action in [4, 5, 6]:
                 if reward > 0:
                     self.data_states[i] = max(0, self.data_states[i] - reward)
-                    self.energy_states[i] = max(0, self.energy_states[i] - reward * e_t)
+                    self.energy_states[i] = max(
+                        0, self.energy_states[i] - reward * e_t)
                 self.data_states[i] = max(0, self.data_states[i] - loss)
-                self.energy_states[i] = max(0, self.energy_states[i] - loss * e_t)
+                self.energy_states[i] = max(
+                    0, self.energy_states[i] - loss * e_t)
                 packets_lost[i] += losses[i]
             total_reward += rewards[i]
 

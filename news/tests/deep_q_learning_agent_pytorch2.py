@@ -199,7 +199,7 @@ class DeepQLearningAgentJAL:
                           f"Packet Loss Ratios: {[f'{r:.4f}' for r in packet_loss_ratios]}")
                 self.save_models(save_path)
                 if (i + 1) == 100000:
-                    self.plot_progress(total_history, per_user_history, "jal_progress_at_100k.png")
+                    self.plot_progress(total_history, per_user_history, "jal_progress_at_100k_0.png")
         avg_per_user_final = [per_user_totals[u] / T for u in range(self.num_users)]
         final_packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0 
                                     for u in range(self.num_users)]
@@ -211,10 +211,10 @@ class DeepQLearningAgentJAL:
         return total_reward / T, avg_per_user_final
 
 if __name__ == "__main__":
-    agent = DeepQLearningAgentJAL(load_path="jal_checkpoint.pth")
+    agent = DeepQLearningAgentJAL(load_path="jal_checkpoint_0.pth")
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path="jal_checkpoint.pth",
-        plot_path="jal_training_progress.png"
+        save_path="jal_checkpoint_0.pth",
+        plot_path="jal_training_progress_0.png"
     )
     print(f"JAL total average reward: {avg_total_multi:.4f}")
     print(f"JAL per-user average rewards: {[f'{r:.4f}' for r in avg_per_user_multi]}")
