@@ -1,25 +1,24 @@
-# Existing parameters remain largely the same, but we add channel-specific settings
 nu = 0.1  # Probability jammer is idle
-arrival_rate = 3  # Data arrival rate
+arrival_rate = 1  # Data arrival rate
 nu_p = [0.6, 0.2, 0.2]  # Jamming power level probabilities
 d_t = 1  # Packets per active transmission
 e_t = 1  # Energy per packet
 d_bj_arr = [1, 2, 3]  # Backscatter packets per jamming level
 e_hj_arr = [1, 2, 3]  # Harvested energy per jamming level
 dt_ra_arr = [2, 1, 0]  # Rate adaptation packets per jamming level
-d_queue_size = 10
+d_queue_size = 100000
 e_queue_size = 10
 b_dagger = 3  # Fixed backscatter rate
 num_users = 2  # Number of users
-num_channels = num_users  # One channel per user
+num_channels = 1  # Single channel for TDMA
 num_actions = 7  # Actions: idle, transmit, harvest, backscatter, RA1, RA2, RA3
 num_states = 2 * (d_queue_size + 1) * (e_queue_size + 1)  # Per-user discrete states
-num_features = num_channels + 2 * num_users # State: jammer state per channel + data/energy per user
+num_features = 1 + 1 + 2 * num_users  # State: 1 jammer state + 1 time_slot + data/energy per user (2 * 8 = 16) = 18
 memory_size = 10000
 batch_size = 52
 learning_rate_deepQ = 0.0001
 gamma_deepQ = 0.99
 learning_rate_Q = 0.1
 gamma_Q = 0.9
-T = 1000000  # Training iterations
+T = 1000000  # Training iterations (1M slots, ~125k frames for 8 users)
 step = 1000

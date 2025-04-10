@@ -6,18 +6,18 @@ from scipy.stats import poisson
 class Environment:
     def __init__(self, num_users=num_users, num_channels=num_channels):
         self.num_users = num_users
-        self.num_channels = num_channels
-        self.jammer_states = [0] * num_channels  # Jammer state per channel (0: idle, 1: active)
-        self.data_states = [0] * num_users  # Data queue per user
-        self.energy_states = [0] * num_users  # Energy queue per user
-        self.channels = list(range(num_channels))  # Channels assigned as 0, 1, 2, ..., num_users-1
+        self.num_channels = num_channels  # Should be 1 for TDMA
+        self.jammer_state = 0  # Single jammer state for the shared channel
+        self.data_states = [0] * num_users
+        self.energy_states = [0] * num_users
+        self.time_slot = 0  # Current active user (0 to num_users-1)
 
     def get_state(self):
-        # State includes jammer state for each channel + data/energy for each user
-        return np.array(self.jammer_states + self.data_states + self.energy_states)
+        # State: [jammer_state, time_slot, data_states, energy_states]
+        return np.array([self.jammer_state, self.time_slot] + self.data_states + self.energy_states)
 
     def get_discrete_state(self, user_idx):
-        j = self.jammer_states[user_idx]  # Jammer state for user's channel
+        j = self.jammer_state
         d = self.data_states[user_idx]
         e = self.energy_states[user_idx]
         state_idx = j * (d_queue_size + 1) * (e_queue_size + 1) + d * (e_queue_size + 1) + e
@@ -25,16 +25,19 @@ class Environment:
         return state_idx
 
     def get_possible_actions(self, user_idx):
-        list_actions = [0]  # Stay idle
-        jammer_state = self.jammer_states[user_idx]  # Channel-specific jammer state
-        if jammer_state == 0 and self.data_states[user_idx] > 0 and self.energy_states[user_idx] >= e_t:
-            list_actions.append(1)  # Active transmit
-        if jammer_state == 1:
-            list_actions.append(2)  # Harvest energy
-            if self.data_states[user_idx] > 0:
-                list_actions.append(3)  # Backscatter
-            if self.energy_states[user_idx] >= e_t:
-                list_actions.extend([4, 5, 6])  # Rate adaptation actions
+        list_actions = [0]  # Idle always possible
+        if user_idx == self.time_slot:  # Active user
+            if self.jammer_state == 0 and self.data_states[user_idx] > 0 and self.energy_states[user_idx] >= e_t:
+                list_actions.append(1)  # Active transmit
+            if self.jammer_state == 1:
+                list_actions.append(2)  # Harvest energy
+                if self.data_states[user_idx] > 0:
+                    list_actions.append(3)  # Backscatter
+                if self.energy_states[user_idx] >= e_t:
+                    list_actions.extend([4, 5, 6])  # Rate adaptation
+        else:  # Inactive users
+            if self.jammer_state == 1:
+                list_actions.append(2)  # Harvest energy if jammed
         return list_actions
 
     def active_transmit(self, user_idx, max_packets):
@@ -54,54 +57,68 @@ class Environment:
     def calculate_reward(self, actions):
         rewards = [0] * self.num_users
         losses = [0] * self.num_users
+        active_user = self.time_slot
+
         for i, action in enumerate(actions):
-            channel_jammer = self.jammer_states[i]  # Jammer state for user's channel
-            if action == 0:
-                rewards[i] = 0
-            elif action == 1 and channel_jammer == 0:  # Active transmit, no jamming
-                rewards[i] = self.active_transmit(i, d_t)
-            elif action == 2 and channel_jammer == 1:  # Harvest energy
-                rewards[i] = random.choices(e_hj_arr, nu_p, k=1)[0]
-            elif action == 3 and channel_jammer == 1:  # Backscatter
-                d_bj = random.choices(d_bj_arr, nu_p, k=1)[0]
-                max_rate = min(b_dagger, self.data_states[i])
-                rewards[i] = min(d_bj, self.data_states[i])
-                if max_rate > rewards[i]:
-                    losses[i] = max_rate - rewards[i]
-            elif action in [4, 5, 6] and channel_jammer == 1:  # Rate adaptation
-                max_ra = random.choices(dt_ra_arr, nu_p, k=1)[0]
-                idx = action - 4
-                rewards[i] = self.active_transmit(i, dt_ra_arr[idx])
-                if dt_ra_arr[idx] > max_ra:
-                    losses[i] = rewards[i]
+            if i == active_user:  # Active user
+                if action == 0:
                     rewards[i] = 0
+                elif action == 1 and self.jammer_state == 0:
+                    rewards[i] = self.active_transmit(i, d_t)
+                elif action == 2 and self.jammer_state == 1:
+                    rewards[i] = random.choices(e_hj_arr, nu_p, k=1)[0]
+                elif action == 3 and self.jammer_state == 1:
+                    d_bj = random.choices(d_bj_arr, nu_p, k=1)[0]
+                    max_rate = min(b_dagger, self.data_states[i])
+                    rewards[i] = min(d_bj, self.data_states[i])
+                    if max_rate > rewards[i]:
+                        losses[i] = max_rate - rewards[i]
+                elif action in [4, 5, 6] and self.jammer_state == 1:
+                    max_ra = random.choices(dt_ra_arr, nu_p, k=1)[0]
+                    idx = action - 4
+                    rewards[i] = self.active_transmit(i, dt_ra_arr[idx])
+                    if dt_ra_arr[idx] > max_ra:
+                        losses[i] = rewards[i]
+                        rewards[i] = 0
+            else:  # Inactive users
+                if action == 2 and self.jammer_state == 1:
+                    rewards[i] = random.choices(e_hj_arr, nu_p, k=1)[0]
+                # Ignore other actions (e.g., 1, 3, 4, 5, 6)
+
         return rewards, losses
 
     def step(self, actions):
         rewards, losses = self.calculate_reward(actions)
-        total_reward = 0
+        
         packets_arrived = [0] * self.num_users
         packets_lost = [0] * self.num_users
-        for i, (action, reward, loss) in enumerate(zip(actions, rewards, losses)):
-            if action == 1:
-                self.data_states[i] = max(0, self.data_states[i] - reward)
-                self.energy_states[i] = max(0, self.energy_states[i] - reward * e_t)
-            elif action == 2:
-                if self.energy_states[i] < e_queue_size:
-                    self.energy_states[i] = min(e_queue_size, self.energy_states[i] + reward)
-                rewards[i] = 0  # Reward for harvesting is in energy gain, not immediate reward
-            elif action == 3:
-                max_rate = min(b_dagger, self.data_states[i])
-                self.data_states[i] = max(0, self.data_states[i] - max_rate)
-                packets_lost[i] += losses[i]
-            elif action in [4, 5, 6]:
-                if reward > 0:
-                    self.data_states[i] = max(0, self.data_states[i] - reward)
-                    self.energy_states[i] = max(0, self.energy_states[i] - reward * e_t)
-                packets_lost[i] += losses[i]
-            total_reward += rewards[i]
+        active_user = self.time_slot
 
-        # Data arrival and jammer state updates
+        for i in range(self.num_users):
+            if i == active_user:  # Active user
+                if actions[i] == 1:
+                    self.data_states[i] = max(0, self.data_states[i] - rewards[i])
+                    self.energy_states[i] = max(0, self.energy_states[i] - rewards[i] * e_t)
+                elif actions[i] == 2:
+                    if self.energy_states[i] < e_queue_size:
+                        self.energy_states[i] = min(e_queue_size, self.energy_states[i] + rewards[i])
+                    rewards[i] = 0  # Harvesting reward is energy gain
+                elif actions[i] == 3:
+                    max_rate = min(b_dagger, self.data_states[i])
+                    self.data_states[i] = max(0, self.data_states[i] - max_rate)
+                    packets_lost[i] += losses[i]
+                elif actions[i] in [4, 5, 6]:
+                    if rewards[i] > 0:
+                        self.data_states[i] = max(0, self.data_states[i] - rewards[i])
+                        self.energy_states[i] = max(0, self.energy_states[i] - rewards[i] * e_t)
+                    packets_lost[i] += losses[i]
+            else:  # Inactive users
+                if actions[i] == 2 and self.jammer_state == 1:
+                    if self.energy_states[i] < e_queue_size:
+                        self.energy_states[i] = min(e_queue_size, self.energy_states[i] + rewards[i])
+                    rewards[i] = 0  # Harvesting reward is energy gain
+
+        # Data arrival
         for i in range(self.num_users):
             data_arrive = poisson.rvs(mu=arrival_rate)
             packets_arrived[i] = data_arrive
@@ -110,13 +127,16 @@ class Environment:
                 packets_lost[i] += (new_data_state - d_queue_size)
             self.data_states[i] = min(d_queue_size, new_data_state)
 
-            # Independent jammer state per channel
-            if self.jammer_states[i] == 0:
-                if np.random.random() <= 1 - nu:
-                    self.jammer_states[i] = 1
-            else:
-                if np.random.random() <= nu:
-                    self.jammer_states[i] = 0
+        # Jammer state update (single channel)
+        if self.jammer_state == 0:
+            if np.random.random() <= 1 - nu:
+                self.jammer_state = 1
+        else:
+            if np.random.random() <= nu:
+                self.jammer_state = 0
 
+        # Advance time slot
+        self.time_slot = (self.time_slot + 1) % self.num_users
+        total_reward = sum(rewards)
         next_state = self.get_state()
         return total_reward, next_state, rewards, packets_arrived, packets_lost

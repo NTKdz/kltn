@@ -245,6 +245,7 @@ class SingleDeepQLearningAgent:
             if (i + 1) % 10000 == 0:
                 self.update_target()
             if (i + 1) % step == 0:
+                print(self.env.data_state)
                 avg_reward = total_reward / (i + 1)
                 packet_loss_ratio = total_packets_lost / total_packets_arrived if total_packets_arrived > 0 else 0
                 avg_loss = np.mean(loss_history) if loss_history else 0
