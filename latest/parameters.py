@@ -9,13 +9,13 @@ dt_ra_arr = [2, 1, 0]  # Rate adaptation packets per jamming level
 d_queue_size = 10
 e_queue_size = 10
 b_dagger = 3  # Fixed backscatter rate
-num_users = 8  # Number of users
+num_users = 1  # Number of users
 num_channels = 1  # Single channel for TDMA
 num_actions = 7  # Actions: idle, transmit, harvest, backscatter, RA1, RA2, RA3
 num_states = 2 * (d_queue_size + 1) * (e_queue_size + 1)  # Per-user discrete states
 num_features = 1 + 1 + 2 * num_users  # State: 1 jammer state + 1 time_slot + data/energy per user (2 * 8 = 16) = 18
-memory_size = 10000
-batch_size = 52
+memory_size = 20000
+batch_size = 96
 learning_rate_deepQ = 0.0001
 gamma_deepQ = 0.99
 learning_rate_Q = 0.1
