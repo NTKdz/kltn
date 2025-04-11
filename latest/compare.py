@@ -6,11 +6,11 @@ import matplotlib.pyplot as plt
 
 # Load all datasets
 single_df = pd.read_csv('log/single_training_data.txt', sep='\t')
-multi2_df = pd.read_csv('log/multi_user_training_data_2.txt', sep='\t')
-multi4_df = pd.read_csv('log/multi_user_training_data.txt', sep='\t')
-multi6_df = pd.read_csv('log/multi_user_training_data_6.txt', sep='\t')
-multi8_df = pd.read_csv('log/multi_user_training_data_8.txt', sep='\t')
-multi10_df = pd.read_csv('log/multi_user_training_data_10.txt', sep='\t')
+multi2_df = pd.read_csv('log/multi_user_training_data_tdma_2.txt', sep='\t')
+multi4_df = pd.read_csv('log/multi_user_training_data_tdma_4.txt', sep='\t')
+multi6_df = pd.read_csv('log/multi_user_training_data_tdma_6.txt', sep='\t')
+multi8_df = pd.read_csv('log/multi_user_training_data_tdma_8.txt', sep='\t')
+# multi10_df = pd.read_csv('log/multi_user_training_data_tdma_10.txt', sep='\t')
 
 # =====================
 # Plot Average Reward
@@ -28,8 +28,8 @@ avg_reward_6 = multi6_df[[f'Avg_Reward_User_{i}' for i in range(6)]].mean(axis=1
 plt.plot(multi6_df['Iteration'], avg_reward_6, label='6 Users (avg)', marker='v', markersize=4)
 avg_reward_8 = multi8_df[[f'Avg_Reward_User_{i}' for i in range(8)]].mean(axis=1)
 plt.plot(multi8_df['Iteration'], avg_reward_8, label='8 Users (avg)', marker='<', markersize=4)
-avg_reward_10 = multi10_df[[f'Avg_Reward_User_{i}' for i in range(10)]].mean(axis=1)
-plt.plot(multi10_df['Iteration'], avg_reward_10, label='10 Users (avg)', marker='D', markersize=4)
+# avg_reward_10 = multi10_df[[f'Avg_Reward_User_{i}' for i in range(10)]].mean(axis=1)
+# plt.plot(multi10_df['Iteration'], avg_reward_10, label='10 Users (avg)', marker='D', markersize=4)
 
 plt.xlabel('Iteration')
 plt.ylabel('Average Reward')
@@ -56,8 +56,8 @@ pkt_loss_6 = multi6_df[[f'Packet_Loss_Ratio_User_{i}' for i in range(6)]].mean(a
 plt.plot(multi6_df['Iteration'], pkt_loss_6, label='6 Users (avg)', marker='v', markersize=4)
 pkt_loss_8 = multi8_df[[f'Packet_Loss_Ratio_User_{i}' for i in range(8)]].mean(axis=1)
 plt.plot(multi8_df['Iteration'], pkt_loss_8, label='8 Users (avg)', marker='<', markersize=4)
-pkt_loss_10 = multi10_df[[f'Packet_Loss_Ratio_User_{i}' for i in range(10)]].mean(axis=1)
-plt.plot(multi10_df['Iteration'], pkt_loss_10, label='10 Users (avg)', marker='D', markersize=4)
+# pkt_loss_10 = multi10_df[[f'Packet_Loss_Ratio_User_{i}' for i in range(10)]].mean(axis=1)
+# plt.plot(multi10_df['Iteration'], pkt_loss_10, label='10 Users (avg)', marker='D', markersize=4)
 
 plt.xlabel('Iteration')
 plt.ylabel('Average Packet Loss Ratio')

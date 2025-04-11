@@ -70,7 +70,6 @@ class DeepQLearningAgent:
             return None
         batch = random.sample(self.memory, batch_size)
         states, actions, rewards, next_states, _ = zip(*batch)
-
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.LongTensor(actions).to(self.device)
         rewards = torch.FloatTensor(rewards).to(self.device)
@@ -158,7 +157,7 @@ class DeepQLearningAgent:
                 total_packets_lost[u] += packets_lost[u]
                 per_user_history[u].append(per_user_totals[u] / (i + 1))
             total_history.append(total_reward / (i + 1))
-            self.remember(state, actions, total_reward_step - packetLost, next_state, individual_rewards)
+            self.remember(state, actions, total_reward_step, next_state, individual_rewards)
             losses = self.replay()
             if losses is not None:
                 for u in range(self.num_users):
@@ -183,15 +182,15 @@ class DeepQLearningAgent:
                     print(f"Time Slot {i + 1}, Avg Total Reward: {avg_total:.4f}, "
                           f"Avg Per-User Rewards: {[f'{r:.4f}' for r in avg_per_user]}, "
                           f"Packet Loss Ratios: {[f'{r:.4f}' for r in packet_loss_ratios]}")
-                self.save_models(save_path)
+                # self.save_models(save_path)
                 self.log_to_file(log_path, i + 1, avg_total, avg_per_user, packet_loss_ratios, avg_loss_per_user)
                 if (i + 1) == 100000:
-                    self.plot_progress(total_history, per_user_history, "plot/multi_user_progress_at_100k_tdma_6.png")
+                    self.plot_progress(total_history, per_user_history, "plot/multi_user_progress_at_100k_tdma_10.png")
         avg_per_user_final = [per_user_totals[u] / T for u in range(self.num_users)]
         final_packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0 
                                     for u in range(self.num_users)]
         final_avg_loss_per_user = [np.mean(loss_history[u]) for u in range(self.num_users)] if loss_history[0] else [0] * self.num_users
-        self.save_models(save_path)
+        # self.save_models(save_path)
         self.plot_progress(total_history, per_user_history, plot_path)
         self.log_to_file(log_path, T, total_reward / T, avg_per_user_final, final_packet_loss_ratios, final_avg_loss_per_user)
         print(f"Final Packet Loss Ratios: {[f'{r:.4f}' for r in final_packet_loss_ratios]}")
@@ -201,9 +200,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)  # New TDMA model, don’t load old checkpoint
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path="checkpoint/multi_user_checkpoint_tdma_6.pth",
-        plot_path="plot/multi_user_training_progress_tdma_6.png",
-        log_path="log/multi_user_training_data_tdma_6.txt"
+        save_path="checkpoint/multi_user_checkpoint_tdma_10.pth",
+        plot_path="plot/multi_user_training_progress_tdma_10.png",
+        log_path="log/multi_user_training_data_tdma_10.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(f"Multi-user per-user average rewards: {[f'{r:.4f}' for r in avg_per_user_multi]}")
