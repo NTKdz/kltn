@@ -3,6 +3,7 @@ import numpy as np
 import random
 from scipy.stats import poisson
 
+
 class Environment:
     def __init__(self, num_users=num_users, num_channels=num_channels):
         self.num_users = num_users
@@ -24,7 +25,8 @@ class Environment:
         j = self.jammer_state
         d = self.data_states[user_idx]
         e = self.energy_states[user_idx]
-        state_idx = j * (d_queue_size + 1) * (e_queue_size + 1) + d * (e_queue_size + 1) + e
+        state_idx = j * (d_queue_size + 1) * (e_queue_size +
+                                              1) + d * (e_queue_size + 1) + e
         assert 0 <= state_idx < num_states, f"Invalid state_idx {state_idx}"
         return state_idx
 
@@ -89,10 +91,12 @@ class Environment:
         for i in range(self.num_users):
             if actions[i] == 1:
                 self.data_states[i] = max(0, self.data_states[i] - rewards[i])
-                self.energy_states[i] = max(0, self.energy_states[i] - rewards[i] * e_t)
+                self.energy_states[i] = max(
+                    0, self.energy_states[i] - rewards[i] * e_t)
             elif actions[i] == 2:
                 if self.energy_states[i] < e_queue_size:
-                    self.energy_states[i] = min(e_queue_size, self.energy_states[i] + rewards[i])
+                    self.energy_states[i] = min(
+                        e_queue_size, self.energy_states[i] + rewards[i])
                 rewards[i] = 0
             elif actions[i] == 3:
                 max_rate = min(b_dagger, self.data_states[i])
@@ -100,8 +104,10 @@ class Environment:
                 packets_lost[i] += losses[i]
             elif actions[i] in [4, 5, 6]:
                 if rewards[i] > 0:
-                    self.data_states[i] = max(0, self.data_states[i] - rewards[i])
-                    self.energy_states[i] = max(0, self.energy_states[i] - rewards[i] * e_t)
+                    self.data_states[i] = max(
+                        0, self.data_states[i] - rewards[i])
+                    self.energy_states[i] = max(
+                        0, self.energy_states[i] - rewards[i] * e_t)
                 packets_lost[i] += losses[i]
 
         # Data arrival

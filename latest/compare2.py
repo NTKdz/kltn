@@ -1,36 +1,44 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import re
 
-# Load the datasets
-df1 = pd.read_csv("log/multi_user_training_data_tdma_joint_penalty.txt", sep="\t")
-df2 = pd.read_csv("log/multi_user_training_data_tdma_joint_penalty0.5.txt", sep="\t")
-df3 = pd.read_csv("log\multi_user_training_data_tdma_joint4_exploration.txt", sep="\t")
-
-# Dictionary of models
-data = {
-    "Model 1": df1,
-    "Model 2": df2,
-    "Model 3": df3
+# Paths and model labels
+file_paths = {
+    "Model 1": "flog/multi_user_training_data_tdma_reverted_2_rate_3.txt",
+    "Model 2": "flog/multi_user_training_data_tdma_reverted_2_rate_3test.txt",
+    "Model 3": "log/multi_user_training_data_tdma_reverted_2_test.txt",
+    "Model 4": "log/multi_user_training_data_tdma_reverted4.txt"
 }
 
-# Precompute the averaged columns for each DataFrame
-for df in data.values():
-    df["Avg_Reward"] = (df["Avg_Reward_User_0"] + df["Avg_Reward_User_1"]) / 2
-    df["Packet_Loss_Ratio"] = (df["Packet_Loss_Ratio_User_0"] + df["Packet_Loss_Ratio_User_1"]) / 2
-    df["Avg_Loss"] = (df["Avg_Loss_User_0"] + df["Avg_Loss_User_1"]) / 2
+data = {}
 
-# Metrics to plot: single line per model
+# Load and process each file
+for model_name, path in file_paths.items():
+    df = pd.read_csv(path, sep="\t")
+
+    # Detect user columns dynamically
+    reward_cols = [col for col in df.columns if re.match(r"Avg_Reward_User_\d+", col)]
+    loss_cols = [col for col in df.columns if re.match(r"Avg_Loss_User_\d+", col)]
+    packet_loss_cols = [col for col in df.columns if re.match(r"Packet_Loss_Ratio_User_\d+", col)]
+
+    # Compute averages over all users
+    df["Avg_Reward"] = df[reward_cols].mean(axis=1)
+    df["Avg_Loss"] = df[loss_cols].mean(axis=1)
+    df["Packet_Loss_Ratio"] = df[packet_loss_cols].mean(axis=1)
+
+    data[model_name] = df
+
+# Metrics to plot
 metrics = {
     "Avg_Total_Reward": "Average Total Reward",
-    "Avg_Reward": "Average Reward (Users 0 & 1)",
-    "Packet_Loss_Ratio": "Average Packet Loss Ratio (Users 0 & 1)",
-    "Avg_Loss": "Average Loss (Users 0 & 1)"
+    "Avg_Reward": "Average Reward (All Users)",
+    "Packet_Loss_Ratio": "Average Packet Loss Ratio (All Users)",
+    "Avg_Loss": "Average Loss (All Users)"
 }
 
 # Plot each metric
 for metric_key, metric_label in metrics.items():
     plt.figure(figsize=(10, 6))
-
     for model_name, df in data.items():
         plt.plot(df["Iteration"], df[metric_key], marker='o', label=model_name)
 
