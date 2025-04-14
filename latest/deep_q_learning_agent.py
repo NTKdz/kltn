@@ -44,7 +44,7 @@ class DeepQLearningAgent:
         self.memory = deque(maxlen=memory_size)
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.9999
+        self.epsilon_decay = 0.999  # Slower decay for longer exploration
         self.criterion = nn.SmoothL1Loss()
 
         if load_path and os.path.exists(load_path):
@@ -65,7 +65,6 @@ class DeepQLearningAgent:
         possible_actions = self.env.get_possible_actions(user_idx)
         if random.random() < self.epsilon:
             action = random.choice(possible_actions)
-            # Estimate Q-value for random action (approximate)
             state_tensor = torch.FloatTensor(
                 state).unsqueeze(0).to(self.device)
             with torch.no_grad():
@@ -78,6 +77,28 @@ class DeepQLearningAgent:
                 q_values = self.models[user_idx](state_tensor)[0].cpu().numpy()
             action = max(possible_actions, key=lambda a: q_values[a])
             q_value = q_values[action]
+        return action, q_value
+
+    def evaluate_joint_action(self, state, transmitter_idx, possible_transmission_actions):
+        """Evaluate the best or random transmission action for a user, returning the action and its Q-value."""
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            q_values = self.models[transmitter_idx](state_tensor)[
+                0].cpu().numpy()
+
+        # Epsilon-greedy within the user's possible transmission actions
+        if random.random() < self.epsilon:
+            action = random.choice(possible_transmission_actions)
+            q_value = q_values[action]
+        else:
+            action = max(possible_transmission_actions,
+                         key=lambda a: q_values[a])
+            q_value = q_values[action]
+
+        # Add queue bonus
+        # 0 to 1
+        queue_bonus = self.env.data_states[transmitter_idx] / d_queue_size
+        q_value += queue_bonus
         return action, q_value
 
     def remember(self, state, actions, reward, next_state, individual_rewards):
@@ -98,8 +119,13 @@ class DeepQLearningAgent:
         for user_idx in range(self.num_users):
             self.optimizers[user_idx].zero_grad()
             q_values = self.models[user_idx](states)
-            next_q_values = self.target_models[user_idx](next_states).detach()
-            target_q = rewards + gamma_deepQ * next_q_values.max(dim=1)[0]
+            # Double DQN
+            next_q_values = self.models[user_idx](next_states)
+            next_actions = next_q_values.max(dim=1)[1]
+            target_q_values = self.target_models[user_idx](
+                next_states).detach()
+            target_q = rewards + gamma_deepQ * \
+                target_q_values.gather(1, next_actions.unsqueeze(1)).squeeze(1)
             q_action = q_values.gather(
                 1, actions[:, user_idx].unsqueeze(1)).squeeze(1)
             loss = self.criterion(q_action, target_q)
@@ -129,7 +155,7 @@ class DeepQLearningAgent:
             optimizer.load_state_dict(checkpoint['optimizers_state_dict'][idx])
         self.epsilon = checkpoint['epsilon']
 
-    def plot_progress(self, total_history, per_user_history, filename="multi_user_training_progress_tdma_opportunistic.png"):
+    def plot_progress(self, total_history, per_user_history, filename="multi_user_training_progress_tdma_joint4_exploration.png"):
         plt.figure(figsize=(10, 6))
         plt.plot(total_history, label='Total Avg Reward', color='blue')
         for u in range(self.num_users):
@@ -138,7 +164,7 @@ class DeepQLearningAgent:
         plt.xlabel('Iteration (Time Slot)')
         plt.ylabel('Average Reward')
         plt.title(
-            'Multi-User Training Progression (TDMA with Opportunistic Transmission)')
+            'Multi-User Training Progression (TDMA with Joint Coordination and Exploration)')
         plt.legend()
         plt.grid(True)
         plt.savefig(filename)
@@ -161,9 +187,9 @@ class DeepQLearningAgent:
         with open(filename, 'a') as f:
             f.write(data_line)
 
-    def train(self, save_path="multi_user_checkpoint_tdma_opportunistic.pth",
-              plot_path="multi_user_training_progress_tdma_opportunistic.png",
-              log_path="log/multi_user_training_data_tdma_opportunistic.txt"):
+    def train(self, save_path="multi_user_checkpoint_tdma_joint4_exploration.pth",
+              plot_path="multi_user_training_progress_tdma_joint4_exploration.png",
+              log_path="log/multi_user_training_data_tdma_joint4_exploration.txt"):
         total_reward = 0
         per_user_totals = [0] * self.num_users
         total_packets_arrived = [0] * self.num_users
@@ -177,45 +203,41 @@ class DeepQLearningAgent:
         energy_state_history = [[] for _ in range(self.num_users)]
 
         for i in range(T):
-            # Collect best actions and Q-values for all users
-            user_actions = []
-            user_q_values = []
-            dataLost = 0
-            for u in range(self.num_users):
-                action, q_value = self.get_action(state, u)
-                user_actions.append(action)
-                user_q_values.append(q_value)
-
-            # Find users who want to transmit
-            transmission_candidates = []
-            for u in range(self.num_users):
-                if user_actions[u] in transmission_actions:
-                    transmission_candidates.append(
-                        (u, user_actions[u], user_q_values[u]))
-
-            # Select the best transmitter
-            actions = [0] * self.num_users  # Initialize all to idle
+            # Collect all transmission candidates
+            candidates = []  # List of (user, action, q_value)
             active_user = self.env.time_slot
-            if transmission_candidates:
-                # Choose user with highest Q-value
-                best_user, best_action, _ = max(
-                    transmission_candidates, key=lambda x: x[2])
+
+            for u in range(self.num_users):
+                possible_actions = self.env.get_possible_actions(u)
+                transmission_options = [
+                    a for a in possible_actions if a in transmission_actions]
+                if transmission_options:  # If user has transmission actions
+                    # Get the best or random action for this user
+                    action, q_value = self.evaluate_joint_action(
+                        state, u, transmission_options)
+                    candidates.append((u, action, q_value))
+
+            # Assign actions
+            actions = [0] * self.num_users
+            if candidates:
+                # Epsilon-greedy selection among candidates
+                if random.random() < self.epsilon:
+                    # Explore: randomly select a candidate
+                    best_user, best_action, _ = random.choice(candidates)
+                else:
+                    # Exploit: select the candidate with the highest Q-value
+                    best_user, best_action, _ = max(
+                        candidates, key=lambda x: x[2])
+
                 actions[best_user] = best_action
-                if best_user != active_user:
-                    actions[active_user] = 0  # Active user idles if not chosen
-                # Allow others to harvest if possible
                 for u in range(self.num_users):
                     if u != best_user:
                         if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
                             actions[u] = 2
             else:
-                # No one wants to transmit, active user uses their action
-                actions[active_user] = user_actions[active_user]
-                # Others can harvest if possible
                 for u in range(self.num_users):
-                    if u != active_user:
-                        if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
-                            actions[u] = 2
+                    if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
+                        actions[u] = 2
 
             total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost = self.env.step(
                 actions)
@@ -224,19 +246,18 @@ class DeepQLearningAgent:
                 per_user_totals[u] += individual_rewards[u]
                 total_packets_arrived[u] += packets_arrived[u]
                 total_packets_lost[u] += packets_lost[u]
-                dataLost += packets_lost[u]
                 per_user_history[u].append(per_user_totals[u] / (i + 1))
                 data_state_history[u].append(self.env.data_states[u])
                 energy_state_history[u].append(self.env.energy_states[u])
             total_history.append(total_reward / (i + 1))
-            self.remember(state, actions, total_reward_step-dataLost,
-                          next_state, individual_rewards)
+            self.remember(state, actions, total_reward_step -
+                          sum(packets_lost) * 0.5, next_state, individual_rewards)
             losses = self.replay()
             if losses is not None:
                 for u in range(self.num_users):
                     loss_history[u].append(losses[u])
             state = next_state
-            if (i + 1) % 10000 == 0:
+            if (i + 1) % 5000 == 0:
                 self.update_target()
             if (i + 1) % step == 0:
                 avg_data_state = [np.mean(data_state_history[u])
@@ -244,7 +265,7 @@ class DeepQLearningAgent:
                 avg_energy_state = [np.mean(energy_state_history[u])
                                     for u in range(self.num_users)]
                 print(f"Avg Data States: {[f'{s:.4f}' for s in avg_data_state]}, "
-                      f"Avg Energy States: {[f'{s:.4f}' for s in avg_energy_state]}")
+                      f"Avg Energy States: {[f'{s:.4f}' for s in avg_energy_state]}, Epsilon: {self.epsilon:.4f}")
                 avg_total = np.mean(total_history[-step:])
                 avg_per_user = [np.mean(per_user_history[u][-step:])
                                 for u in range(self.num_users)]
@@ -268,7 +289,9 @@ class DeepQLearningAgent:
                                  avg_per_user, packet_loss_ratios, avg_loss_per_user)
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       "plot/multi_user_progress_at_100k_tdma_opportunistic_2.png")
+                                       "plot/multi_user_progress_at_100k_tdma_joint4_exploration.png")
+            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+            
         avg_per_user_final = [per_user_totals[u] /
                               T for u in range(self.num_users)]
         final_packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
@@ -289,9 +312,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path="checkpoint/multi_user_checkpoint_tdma_opportunistic_2.pth",
-        plot_path="plot/multi_user_training_progress_tdma_opportunistic_2.png",
-        log_path="log/multi_user_training_data_tdma_opportunistic_2.txt"
+        save_path="checkpoint/multi_user_checkpoint_tdma_joint4_exploration.pth",
+        plot_path="plot/multi_user_training_progress_tdma_joint4_exploration.png",
+        log_path="log/multi_user_training_data_tdma_joint4_exploration.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

@@ -13,8 +13,12 @@ class Environment:
         self.time_slot = 0
 
     def get_state(self):
-        # State: [jammer_state, time_slot, data_states, energy_states]
-        return np.array([self.jammer_state, self.time_slot] + self.data_states + self.energy_states)
+        # Include average queue size of other users (normalized)
+        avg_other_queue = np.mean(self.data_states) / d_queue_size
+        return np.array([self.jammer_state, self.time_slot / num_users] + 
+                        [d / d_queue_size for d in self.data_states] + 
+                        [e / e_queue_size for e in self.energy_states] + 
+                        [avg_other_queue])
 
     def get_discrete_state(self, user_idx):
         j = self.jammer_state
@@ -26,7 +30,6 @@ class Environment:
 
     def get_possible_actions(self, user_idx):
         list_actions = [0]  # Idle always possible
-        # All users can potentially select any action, agent controls transmission
         if self.jammer_state == 0 and self.data_states[user_idx] > 0 and self.energy_states[user_idx] >= e_t:
             list_actions.append(1)  # Active transmit
         if self.jammer_state == 1:

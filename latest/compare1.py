@@ -5,10 +5,10 @@ from matplotlib import pyplot as plt
 import pandas as pd
 
 single_df = pd.read_csv('log2/single_training_data.txt', sep='\t')
-multi2_df = pd.read_csv('log2/multi_user_training_data_tdma_2.txt', sep='\t')
-multi4_df = pd.read_csv('log2/multi_user_training_data_tdma_4.txt', sep='\t')
-multi6_df = pd.read_csv('log2/multi_user_training_data_tdma_6.txt', sep='\t')
-multi8_df = pd.read_csv('log2/multi_user_training_data_tdma_8.txt', sep='\t')
+multi2_df = pd.read_csv('log/multi_user_training_data_tdma_2.txt', sep='\t')
+multi4_df = pd.read_csv('log/multi_user_training_data_tdma_4.txt', sep='\t')
+multi6_df = pd.read_csv('log/multi_user_training_data_tdma_6.txt', sep='\t')
+multi8_df = pd.read_csv('log/multi_user_training_data_tdma_8.txt', sep='\t')
 
 plt.figure(figsize=(12, 7))
 
