@@ -188,8 +188,8 @@ class DeepQLearningAgent:
                     possible_transmissions = [a for a in self.env.get_possible_actions(u) if a in transmission_actions]
                     if possible_transmissions:
                         action, q_value = self.get_action(state, u)
-                        if action in transmission_actions:  # Only consider if the best action is a transmission
-                            q_value += self.env.data_states[u] / d_queue_size  # Queue bonus
+                        if action in transmission_actions: 
+                            # q_value += self.env.data_states[u] / d_queue_size  # Queue bonus
                             candidates.append((u, action, q_value))
 
                 # Step 4: Select the best candidate to transmit (if any)
@@ -253,7 +253,7 @@ class DeepQLearningAgent:
                 self.save_models(save_path)
                 self.log_to_file(log_path, i + 1, avg_total, avg_per_user, packet_loss_ratios, avg_loss_per_user)
                 if (i + 1) == 100000:
-                    self.plot_progress(total_history, per_user_history, f"plot/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}test.png")
+                    self.plot_progress(total_history, per_user_history, f"plot/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_removepriority_removedividetimeslot.png")
         avg_per_user_final = [per_user_totals[u] / T for u in range(self.num_users)]
         final_packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
                                     for u in range(self.num_users)]
@@ -268,9 +268,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}test.pth",
-        plot_path=f"plot/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}test.png",
-        log_path=f"log/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}test.txt"
+        save_path=f"checkpoint/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_removepriority_removedividetimeslot.pth",
+        plot_path=f"plot/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_removepriority_removedividetimeslot.png",
+        log_path=f"log/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_removepriority_removedividetimeslot.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(f"Multi-user per-user average rewards: {[f'{r:.4f}' for r in avg_per_user_multi]}")

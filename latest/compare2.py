@@ -4,10 +4,10 @@ import re
 
 # Paths and model labels
 file_paths = {
-    "Model 1": "flog/multi_user_training_data_tdma_reverted_2_rate_3.txt",
-    "Model 2": "flog/multi_user_training_data_tdma_reverted_2_rate_3test.txt",
-    "Model 3": "log/multi_user_training_data_tdma_reverted_2_test.txt",
-    "Model 4": "log/multi_user_training_data_tdma_reverted4.txt"
+    "Model 1": "log/multi_user_training_data_tdma_reverted_2_rate_3_removepriority_removedividetimeslot.txt",
+    "Model 2": "log/multi_user_training_data_tdma_reverted_2_rate_3test.txt",
+    # "Model 3": "log/multi_user_training_data_tdma_reverted_2_test.txt",
+    # "Model 4": "log/multi_user_training_data_tdma_reverted4.txt"
 }
 
 data = {}
