@@ -16,18 +16,44 @@ class Environment:
     def get_state(self):
         # Include average queue size of other users (normalized)
         avg_other_queue = np.mean(self.data_states) / d_queue_size
-        return np.array([self.jammer_state, self.time_slot / num_users] + 
-                        [d / d_queue_size for d in self.data_states] + 
-                        [e / e_queue_size for e in self.energy_states] + 
+        return np.array([self.jammer_state, self.time_slot] +
+                        [d / d_queue_size for d in self.data_states] +
+                        [e / e_queue_size for e in self.energy_states] +
                         [avg_other_queue])
+        # return np.array([self.jammer_state, self.time_slot] + self.data_states +
+        #                 self.energy_states)
 
     def get_discrete_state(self, user_idx):
-        j = self.jammer_state
-        d = self.data_states[user_idx]
-        e = self.energy_states[user_idx]
-        state_idx = j * (d_queue_size + 1) * (e_queue_size +
-                                              1) + d * (e_queue_size + 1) + e
-        assert 0 <= state_idx < num_states, f"Invalid state_idx {state_idx}"
+        # Discretize the continuous state components
+        j = self.jammer_state  # Binary: 0 or 1
+        t = self.time_slot  # Discrete: 0 to num_users-1
+        d = self.data_states[user_idx] / d_queue_size  # Normalized: [0, 1]
+        e = self.energy_states[user_idx] / e_queue_size  # Normalized: [0, 1]
+        avg_q = np.mean(self.data_states) / d_queue_size  # Normalized: [0, 1]
+
+        # Bin normalized values into 4 levels
+        def discretize(value):
+            if value < 0.25:
+                return 0
+            elif value < 0.5:
+                return 1
+            elif value < 0.75:
+                return 2
+            else:
+                return 3
+
+        d_bin = discretize(d)  # 0, 1, 2, or 3
+        e_bin = discretize(e)  # 0, 1, 2, or 3
+        q_bin = discretize(avg_q)  # 0, 1, 2, or 3
+
+        # Compute state index
+        state_idx = (j * self.num_users * 4 * 4 * 4 +
+                     t * 4 * 4 * 4 +
+                     d_bin * 4 * 4 +
+                     e_bin * 4 +
+                     q_bin)
+        total_states = 2 * self.num_users * 4 * 4 * 4  # 640 for num_users=5
+        assert 0 <= state_idx < total_states, f"Invalid state_idx {state_idx}"
         return state_idx
 
     def get_possible_actions(self, user_idx):
@@ -87,6 +113,7 @@ class Environment:
         rewards, losses = self.calculate_reward(actions)
         packets_arrived = [0] * self.num_users
         packets_lost = [0] * self.num_users
+        packets_lost_by_transmit = [0] * self.num_users
 
         for i in range(self.num_users):
             if actions[i] == 1:
@@ -112,6 +139,7 @@ class Environment:
 
         # Data arrival
         for i in range(self.num_users):
+            packets_lost_by_transmit[i] += packets_lost[i]
             data_arrive = poisson.rvs(mu=arrival_rate)
             packets_arrived[i] = data_arrive
             new_data_state = self.data_states[i] + data_arrive
@@ -131,4 +159,4 @@ class Environment:
         self.time_slot = (self.time_slot + 1) % self.num_users
         total_reward = sum(rewards)
         next_state = self.get_state()
-        return total_reward, next_state, rewards, packets_arrived, packets_lost
+        return total_reward, next_state, rewards, packets_arrived, packets_lost, packets_lost_by_transmit
