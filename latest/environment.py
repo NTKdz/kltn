@@ -23,15 +23,7 @@ class Environment:
         # return np.array([self.jammer_state, self.time_slot] + self.data_states +
         #                 self.energy_states)
 
-    def get_discrete_state(self, user_idx):
-        # Discretize the continuous state components
-        j = self.jammer_state  # Binary: 0 or 1
-        t = self.time_slot  # Discrete: 0 to num_users-1
-        d = self.data_states[user_idx] / d_queue_size  # Normalized: [0, 1]
-        e = self.energy_states[user_idx] / e_queue_size  # Normalized: [0, 1]
-        avg_q = np.mean(self.data_states) / d_queue_size  # Normalized: [0, 1]
-
-        # Bin normalized values into 4 levels
+    # def get_discrete_state(self, user_idx):
         def discretize(value):
             if value < 0.25:
                 return 0
@@ -41,18 +33,61 @@ class Environment:
                 return 2
             else:
                 return 3
+            
+        j = self.jammer_state  # Binary: 0 or 1
+        t = self.time_slot  # Discrete: 0 to num_users-1
+        # Bin all users' data states
+        data_bins = [discretize(d / d_queue_size) for d in self.data_states]
+        # Bin all users' energy states
+        energy_bins = [discretize(e / e_queue_size)
+                       for e in self.energy_states]
+        avg_q = np.mean(self.data_states) / d_queue_size
+        q_bin = discretize(avg_q)
 
-        d_bin = discretize(d)  # 0, 1, 2, or 3
-        e_bin = discretize(e)  # 0, 1, 2, or 3
-        q_bin = discretize(avg_q)  # 0, 1, 2, or 3
+        # Compute state index with all users' data and energy states
+        state_idx = j * (self.num_users * (4 ** (2 * self.num_users)) * 4) + \
+            t * ((4 ** (2 * self.num_users)) * 4)
+        for u in range(self.num_users):
+            state_idx += data_bins[u] * (4 ** (2 * self.num_users - 2 * u - 1))
+            state_idx += energy_bins[u] * \
+                (4 ** (2 * self.num_users - 2 * u - 2))
+        state_idx += q_bin
 
-        # Compute state index
-        state_idx = (j * self.num_users * 4 * 4 * 4 +
-                     t * 4 * 4 * 4 +
-                     d_bin * 4 * 4 +
-                     e_bin * 4 +
-                     q_bin)
-        total_states = 2 * self.num_users * 4 * 4 * 4  # 640 for num_users=5
+        total_states = 2 * self.num_users * \
+            (4 ** (2 * self.num_users + 1)) 
+        assert 0 <= state_idx < total_states, f"Invalid state_idx {state_idx}"
+        return state_idx
+
+    def get_discrete_state(self, user_idx):
+        def discretize(value):
+            if value < 0.25:
+                return 0
+            elif value < 0.5:
+                return 1
+            elif value < 0.75:
+                return 2
+            else:
+                return 3
+                
+        j = self.jammer_state
+        t = self.time_slot
+        d = self.data_states[user_idx] / d_queue_size
+        e = self.energy_states[user_idx] / e_queue_size
+        avg_q = np.mean(self.data_states) / d_queue_size
+        avg_e = np.mean(self.energy_states) / e_queue_size
+
+        d_bin = discretize(d)
+        e_bin = discretize(e)
+        q_bin = discretize(avg_q)
+        e_avg_bin = discretize(avg_e)
+
+        state_idx = (j * self.num_users * 4 * 4 * 4 * 4 +
+                    t * 4 * 4 * 4 * 4 +
+                    d_bin * 4 * 4 * 4 +
+                    e_bin * 4 * 4 +
+                    q_bin * 4 +
+                    e_avg_bin)
+        total_states = 2 * self.num_users * 4 * 4 * 4 * 4
         assert 0 <= state_idx < total_states, f"Invalid state_idx {state_idx}"
         return state_idx
 

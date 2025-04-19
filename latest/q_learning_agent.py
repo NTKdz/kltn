@@ -11,10 +11,10 @@ class QLearningAgent:
         self.env = Environment(num_users)
         self.num_users = num_users
         # Initialize Q-table: [num_states, num_actions] for each user
-        self.q_tables = [np.zeros((num_states, num_actions)) for _ in range(num_users)]
+        self.q_tables = [np.zeros((num_states, num_actions)) for _ in range(self.num_users)]
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.999
+        self.epsilon_decay = 0.9999
         self.count_changes = []
 
         if load_path and os.path.exists(load_path):
@@ -142,12 +142,26 @@ class QLearningAgent:
                     actions[best_user] = best_action
                     for u in range(self.num_users):
                         if u != best_user:
-                            if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
-                                actions[u] = 2
+                            possible_actions = [a for a in self.env.get_possible_actions(u) if a not in transmission_actions]
+                            if not possible_actions:
+                                possible_actions = [0]  # Ensure idle is always possible
+                            if random.random() < self.epsilon:
+                                action = random.choice(possible_actions)
+                            else:
+                                discrete_state = self.env.get_discrete_state(u)
+                                action = max(possible_actions, key=lambda a: self.q_tables[u][discrete_state, a])
+                            actions[u] = action
                 else:
                     for u in range(self.num_users):
-                        if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
-                            actions[u] = 2
+                        possible_actions = [a for a in self.env.get_possible_actions(u) if a not in transmission_actions]
+                        if not possible_actions:
+                            possible_actions = [0]  # Ensure idle is always possible
+                        if random.random() < self.epsilon:
+                            action = random.choice(possible_actions)
+                        else:
+                            discrete_state = self.env.get_discrete_state(u)
+                            action = max(possible_actions, key=lambda a: self.q_tables[u][discrete_state, a])
+                        actions[u] = action
 
             # Environment step
             total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit = self.env.step(actions)
@@ -160,7 +174,7 @@ class QLearningAgent:
             # Logging and tracking
             for u in range(self.num_users):
                 per_user_totals[u] += individual_rewards[u]
-                total_packets_arrived[u] += packets_arrived[u]
+                total_packets_arrived[u] += individual_rewards[u]
                 total_packets_lost[u] += packets_lost[u]
                 total_packets_lost_by_transmit[u] += packets_lost_by_transmit[u]
                 per_user_history[u].append(per_user_totals[u] / (i + 1))
@@ -179,40 +193,40 @@ class QLearningAgent:
                 count_change = 0
                 avg_total = np.mean(total_history[-step:])
                 avg_per_user = [np.mean(per_user_history[u][-step:]) for u in range(self.num_users)]
-                packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+                packet_loss_ratios = [total_packets_lost[u] / (total_packets_arrived[u] + total_packets_lost[u]) if total_packets_arrived[u] > 0 else 0
                                       for u in range(self.num_users)]
-                packet_lost_by_transmit_ratios = [total_packets_lost_by_transmit[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+                packet_loss_by_transmit_ratios = [total_packets_lost_by_transmit[u] / (total_packets_arrived[u] + total_packets_lost_by_transmit[u]) if total_packets_arrived[u] > 0 else 0
                                                   for u in range(self.num_users)]
                 print(f"Time Slot {i + 1}, Avg Total Reward: {avg_total:.4f}, "
                       f"Avg Per-User Rewards: {[f'{r:.4f}' for r in avg_per_user]}, "
                       f"Packet Loss Ratios: {[f'{r:.4f}' for r in packet_loss_ratios]}, "
-                      f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_lost_by_transmit_ratios]}")
+                      f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_loss_by_transmit_ratios]}")
                 self.save_q_tables(save_path)
-                self.log_to_file(log_path, i + 1, avg_total, avg_per_user, packet_loss_ratios, count_change, packet_lost_by_transmit_ratios)
+                self.log_to_file(log_path, i + 1, avg_total, avg_per_user, packet_loss_ratios, count_change, packet_loss_by_transmit_ratios)
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_final2/multi_user_progress_at_100k_qlearning_{num_users}_rate_{arrival_rate}.png")
+                                       f"plot/test/multi_user_progress_at_100k_qlearning_{num_users}_rate_{arrival_rate}.png")
 
         avg_per_user_final = [per_user_totals[u] / T for u in range(self.num_users)]
-        final_packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+        final_packet_loss_ratios = [total_packets_lost[u] / (total_packets_arrived[u] + total_packets_lost[u]) if total_packets_arrived[u] > 0 else 0
                                     for u in range(self.num_users)]
-        final_packet_lost_by_transmit_ratios = [total_packets_lost_by_transmit[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+        final_packet_loss_ratios_by_transmit = [total_packets_lost_by_transmit[u] / (total_packets_arrived[u] + total_packets_lost_by_transmit[u]) if total_packets_arrived[u] > 0 else 0
                                                 for u in range(self.num_users)]
         self.save_q_tables(save_path)
         self.plot_progress(total_history, per_user_history, plot_path)
         self.log_to_file(log_path, T, total_reward / T, avg_per_user_final,
-                         final_packet_loss_ratios, count_change, final_packet_lost_by_transmit_ratios)
+                         final_packet_loss_ratios, count_change, final_packet_loss_ratios_by_transmit)
         print(f"Final Packet Loss Ratios: {[f'{r:.4f}' for r in final_packet_loss_ratios]}")
-        print(f"Final Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in final_packet_lost_by_transmit_ratios]}")
+        print(f"Final Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in final_packet_loss_ratios_by_transmit]}")
         return total_reward / T, avg_per_user_final
 
 if __name__ == "__main__":
     agent = QLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_final2/multi_user_qlearning_{num_users}_rate_{arrival_rate}.npz",
-        plot_path=f"plot/test_final2/multi_user_training_progress_qlearning_{num_users}_rate_{arrival_rate}.png",
-        log_path=f"log/test_final2/multi_user_training_data_qlearning_{num_users}_rate_{arrival_rate}.txt"
+        save_path=f"checkpoint/test/multi_user_qlearning_{num_users}_rate_{arrival_rate}.npz",
+        plot_path=f"plot/test/multi_user_training_progress_qlearning_{num_users}_rate_{arrival_rate}.png",
+        log_path=f"log/test/multi_user_training_data_qlearning_{num_users}_rate_{arrival_rate}.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(f"Multi-user per-user average rewards: {[f'{r:.4f}' for r in avg_per_user_multi]}")

@@ -44,7 +44,7 @@ class DeepQLearningAgent:
         self.memory = deque(maxlen=memory_size)
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.999
+        self.epsilon_decay = 0.9999
         self.criterion = nn.SmoothL1Loss()
 
         if load_path and os.path.exists(load_path):
@@ -186,7 +186,7 @@ class DeepQLearningAgent:
         count_change = 0
         for i in range(T):
             actions = [0] * self.num_users
-            current_agent = self.env.time_slot 
+            current_agent = self.env.time_slot
 
             # Step 1: Evaluate the current time slot's agent
             possible_actions = self.env.get_possible_actions(current_agent)
@@ -226,13 +226,31 @@ class DeepQLearningAgent:
                     actions[best_user] = best_action
                     for u in range(self.num_users):
                         if u != best_user:
-                            if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
-                                actions[u] = 2
+                            possible_actions = [a for a in self.env.get_possible_actions(u) if a not in transmission_actions]
+                            if not possible_actions:
+                                possible_actions = [0]  # Ensure idle is always possible
+                            if random.random() < self.epsilon:
+                                action = random.choice(possible_actions)
+                            else:
+                                state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+                                with torch.no_grad():
+                                    q_values = self.models[u](state_tensor)[0].cpu().numpy()
+                                action = max(possible_actions, key=lambda a: q_values[a])
+                            actions[u] = action
                 else:
                     # No one transmits, all agents harvest if possible
                     for u in range(self.num_users):
-                        if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
-                            actions[u] = 2
+                        possible_actions = [a for a in self.env.get_possible_actions(u) if a not in transmission_actions]
+                        if not possible_actions:
+                            possible_actions = [0]  # Ensure idle is always possible
+                        if random.random() < self.epsilon:
+                            action = random.choice(possible_actions)
+                        else:
+                            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+                            with torch.no_grad():
+                                q_values = self.models[u](state_tensor)[0].cpu().numpy()
+                            action = max(possible_actions, key=lambda a: q_values[a])
+                        actions[u] = action
 
             # Environment step
             total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit = self.env.step(
@@ -241,7 +259,7 @@ class DeepQLearningAgent:
             packetLost = 0
             for u in range(self.num_users):
                 per_user_totals[u] += individual_rewards[u]
-                total_packets_arrived[u] += packets_arrived[u]
+                total_packets_arrived[u] += individual_rewards[u]
                 total_packets_lost[u] += packets_lost[u]
                 total_packets_lost_by_transmit[u] += packets_lost_by_transmit[u]
                 packetLost += packets_lost[u]
@@ -270,9 +288,9 @@ class DeepQLearningAgent:
                 avg_total = np.mean(total_history[-step:])
                 avg_per_user = [np.mean(per_user_history[u][-step:])
                                 for u in range(self.num_users)]
-                packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+                packet_loss_ratios = [total_packets_lost[u] / (total_packets_arrived[u] + total_packets_lost[u]) if total_packets_arrived[u] > 0 else 0
                                       for u in range(self.num_users)]
-                packet_loss_by_transmit_ratios = [total_packets_lost_by_transmit[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+                packet_loss_by_transmit_ratios = [total_packets_lost_by_transmit[u] / (total_packets_arrived[u] + total_packets_lost_by_transmit[u]) if total_packets_arrived[u] > 0 else 0
                                                   for u in range(self.num_users)]
                 avg_loss_per_user = [np.mean(loss_history[u]) for u in range(
                     self.num_users)] if loss_history[0] else [0] * self.num_users
@@ -295,12 +313,12 @@ class DeepQLearningAgent:
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_final2/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}.png")
+                                       f"plot/test_final3/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}.png")
         avg_per_user_final = [per_user_totals[u] /
                               T for u in range(self.num_users)]
-        final_packet_loss_ratios = [total_packets_lost[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+        final_packet_loss_ratios = [total_packets_lost[u] / (total_packets_arrived[u] + total_packets_lost[u]) if total_packets_arrived[u] > 0 else 0
                                     for u in range(self.num_users)]
-        final_packet_loss_ratios_by_transmit = [total_packets_lost_by_transmit[u] / total_packets_arrived[u] if total_packets_arrived[u] > 0 else 0
+        final_packet_loss_ratios_by_transmit = [total_packets_lost_by_transmit[u] / (total_packets_arrived[u] + total_packets_lost_by_transmit[u]) if total_packets_arrived[u] > 0 else 0
                                                 for u in range(self.num_users)]
         final_avg_loss_per_user = [np.mean(loss_history[u]) for u in range(
             self.num_users)] if loss_history[0] else [0] * self.num_users
@@ -320,9 +338,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_final2/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}.pth",
-        plot_path=f"plot/test_final2/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}.png",
-        log_path=f"log/test_final2/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}.txt"
+        save_path=f"checkpoint/test_final3/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}.pth",
+        plot_path=f"plot/test_final3/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}.png",
+        log_path=f"log/test_final3/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(
