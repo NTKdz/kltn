@@ -1,3 +1,4 @@
+import time
 from environment import Environment
 from parameters import *
 import numpy as np
@@ -61,7 +62,6 @@ class DeepQLearningAgent:
                 target.load_state_dict(model.state_dict())
 
     def get_action(self, state, user_idx):
-        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
         possible_actions = self.env.get_possible_actions(user_idx)
         if random.random() < self.epsilon:
             action = random.choice(possible_actions)
@@ -86,23 +86,29 @@ class DeepQLearningAgent:
     def replay(self):
         if len(self.memory) < batch_size:
             return None
+        # batch = random.sample(self.memory, batch_size)
+        # states, actions, rewards, next_states, _ = zip(*batch)
+        # states = torch.FloatTensor(states).to(self.device)
+        # actions = torch.LongTensor(actions).to(self.device)
+        # rewards = torch.FloatTensor(rewards).to(self.device)
+        # next_states = torch.FloatTensor(next_states).to(self.device)
+
         batch = random.sample(self.memory, batch_size)
-        states, actions, rewards, next_states, _ = zip(*batch)
+        states, actions, _, next_states, individual_rewards = zip(*batch)
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.LongTensor(actions).to(self.device)
-        rewards = torch.FloatTensor(rewards).to(self.device)
         next_states = torch.FloatTensor(next_states).to(self.device)
+        individual_rewards = torch.FloatTensor(individual_rewards).to(self.device)
 
         losses = []
         for user_idx in range(self.num_users):
             self.optimizers[user_idx].zero_grad()
             q_values = self.models[user_idx](states)
-            next_q_values = self.models[user_idx](next_states)
-            next_actions = next_q_values.max(dim=1)[1]
             target_q_values = self.target_models[user_idx](
                 next_states).detach()
-            target_q = rewards + gamma_deepQ * \
-                target_q_values.gather(1, next_actions.unsqueeze(1)).squeeze(1)
+            max_next_q_values = target_q_values.max(dim=1)[0]
+            # target_q = rewards + gamma_deepQ * max_next_q_values
+            target_q = individual_rewards[:, user_idx] + gamma_deepQ * max_next_q_values
             q_action = q_values.gather(
                 1, actions[:, user_idx].unsqueeze(1)).squeeze(1)
             loss = self.criterion(q_action, target_q)
@@ -167,6 +173,7 @@ class DeepQLearningAgent:
         with open(filename, 'a') as f:
             f.write(data_line)
 
+    
     def train(self, save_path="multi_user_checkpoint_tdma_reverted.pth",
               plot_path="multi_user_training_progress_tdma_reverted.png",
               log_path="log/multi_user_training_data_tdma_reverted.txt"):
@@ -184,6 +191,7 @@ class DeepQLearningAgent:
         energy_state_history = [[] for _ in range(self.num_users)]
         count_changes = []
         count_change = 0
+        start = time.time()
         for i in range(T):
             actions = [0] * self.num_users
             current_agent = self.env.time_slot
@@ -199,8 +207,22 @@ class DeepQLearningAgent:
                 # Non-transmitting agents harvest if possible
                 for u in range(self.num_users):
                     if u != current_agent:
-                        if self.env.jammer_state == 1 and 2 in self.env.get_possible_actions(u):
-                            actions[u] = 2
+                        possible_actions = [a for a in self.env.get_possible_actions(
+                            u) if a not in transmission_actions]
+                        if not possible_actions:
+                            # Ensure idle is always possible
+                            possible_actions = [0]
+                        if random.random() < self.epsilon:
+                            action = random.choice(possible_actions)
+                        else:
+                            state_tensor = torch.FloatTensor(
+                                state).unsqueeze(0).to(self.device)
+                            with torch.no_grad():
+                                q_values = self.models[u](state_tensor)[
+                                    0].cpu().numpy()
+                            action = max(possible_actions,
+                                         key=lambda a: q_values[a])
+                        actions[u] = action
             else:
                 count_change += 1
                 # Step 3: Current agent does not transmit, evaluate other agents
@@ -226,30 +248,40 @@ class DeepQLearningAgent:
                     actions[best_user] = best_action
                     for u in range(self.num_users):
                         if u != best_user:
-                            possible_actions = [a for a in self.env.get_possible_actions(u) if a not in transmission_actions]
+                            possible_actions = [a for a in self.env.get_possible_actions(
+                                u) if a not in transmission_actions]
                             if not possible_actions:
-                                possible_actions = [0]  # Ensure idle is always possible
+                                # Ensure idle is always possible
+                                possible_actions = [0]
                             if random.random() < self.epsilon:
                                 action = random.choice(possible_actions)
                             else:
-                                state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+                                state_tensor = torch.FloatTensor(
+                                    state).unsqueeze(0).to(self.device)
                                 with torch.no_grad():
-                                    q_values = self.models[u](state_tensor)[0].cpu().numpy()
-                                action = max(possible_actions, key=lambda a: q_values[a])
+                                    q_values = self.models[u](state_tensor)[
+                                        0].cpu().numpy()
+                                action = max(possible_actions,
+                                             key=lambda a: q_values[a])
                             actions[u] = action
                 else:
                     # No one transmits, all agents harvest if possible
                     for u in range(self.num_users):
-                        possible_actions = [a for a in self.env.get_possible_actions(u) if a not in transmission_actions]
+                        possible_actions = [a for a in self.env.get_possible_actions(
+                            u) if a not in transmission_actions]
                         if not possible_actions:
-                            possible_actions = [0]  # Ensure idle is always possible
+                            # Ensure idle is always possible
+                            possible_actions = [0]
                         if random.random() < self.epsilon:
                             action = random.choice(possible_actions)
                         else:
-                            state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+                            state_tensor = torch.FloatTensor(
+                                state).unsqueeze(0).to(self.device)
                             with torch.no_grad():
-                                q_values = self.models[u](state_tensor)[0].cpu().numpy()
-                            action = max(possible_actions, key=lambda a: q_values[a])
+                                q_values = self.models[u](state_tensor)[
+                                    0].cpu().numpy()
+                            action = max(possible_actions,
+                                         key=lambda a: q_values[a])
                         actions[u] = action
 
             # Environment step
@@ -274,15 +306,18 @@ class DeepQLearningAgent:
                 for u in range(self.num_users):
                     loss_history[u].append(losses[u])
             state = next_state
-            if (i + 1) % 5000 == 0:
+
+            if (i + 1) % 2000 == 0:
                 self.update_target()
             if (i + 1) % step == 0:
                 avg_data_state = [np.mean(data_state_history[u])
                                   for u in range(self.num_users)]
                 avg_energy_state = [np.mean(energy_state_history[u])
                                     for u in range(self.num_users)]
+                end = time.time()
                 print(f"Avg Data States: {[f'{s:.4f}' for s in avg_data_state]}, "
-                      f"Avg Energy States: {[f'{s:.4f}' for s in avg_energy_state]}, Epsilon: {self.epsilon:.4f}, Count Change: {count_change}")
+                      f"Avg Energy States: {[f'{s:.4f}' for s in avg_energy_state]}, Epsilon: {self.epsilon:.4f}, Count Change: {count_change}, Time: {end - start:.2f}s")
+                start = end
                 count_changes.append(count_change)
                 count_change = 0
                 avg_total = np.mean(total_history[-step:])
@@ -313,7 +348,10 @@ class DeepQLearningAgent:
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_final3/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}.png")
+                                       f"plot/test_final10/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_2.png")
+
+            self.epsilon = max(
+                self.epsilon_min, self.epsilon * self.epsilon_decay)
         avg_per_user_final = [per_user_totals[u] /
                               T for u in range(self.num_users)]
         final_packet_loss_ratios = [total_packets_lost[u] / (total_packets_arrived[u] + total_packets_lost[u]) if total_packets_arrived[u] > 0 else 0
@@ -338,9 +376,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_final3/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}.pth",
-        plot_path=f"plot/test_final3/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}.png",
-        log_path=f"log/test_final3/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}.txt"
+        save_path=f"checkpoint/test_final10/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_2.pth",
+        plot_path=f"plot/test_final10/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_2.png",
+        log_path=f"log/test_final10/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_2.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

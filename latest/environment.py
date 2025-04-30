@@ -15,60 +15,68 @@ class Environment:
 
     def get_state(self):
         # Include average queue size of other users (normalized)
-        avg_other_queue = np.mean(self.data_states) / d_queue_size
-        return np.array([self.jammer_state, self.time_slot] +
-                        [d / d_queue_size for d in self.data_states] +
-                        [e / e_queue_size for e in self.energy_states] +
-                        [avg_other_queue])
-        # return np.array([self.jammer_state, self.time_slot] + self.data_states +
-        #                 self.energy_states)
+        avg_d_queue = np.mean(self.data_states) / d_queue_size
+        avg_e_queue = np.mean(self.energy_states) / e_queue_size
+
+        # return np.array([self.jammer_state, self.time_slot] +
+        #                 [d / d_queue_size for d in self.data_states] +
+        #                 [e / e_queue_size for e in self.energy_states] +
+        #                 [avg_other_queue])
+        return np.array([self.jammer_state, self.time_slot] + self.data_states +
+                        self.energy_states + [avg_d_queue] +
+                        [avg_e_queue])
 
     # def get_discrete_state(self, user_idx):
-        def discretize(value):
-            if value < 0.25:
-                return 0
-            elif value < 0.5:
-                return 1
-            elif value < 0.75:
-                return 2
-            else:
-                return 3
-            
-        j = self.jammer_state  # Binary: 0 or 1
-        t = self.time_slot  # Discrete: 0 to num_users-1
-        # Bin all users' data states
-        data_bins = [discretize(d / d_queue_size) for d in self.data_states]
-        # Bin all users' energy states
-        energy_bins = [discretize(e / e_queue_size)
-                       for e in self.energy_states]
-        avg_q = np.mean(self.data_states) / d_queue_size
-        q_bin = discretize(avg_q)
+    #     def discretize(value):
+    #         if value < 0.1667:
+    #             return 0
+    #         elif value < 0.3333:
+    #             return 1
+    #         elif value < 0.5:
+    #             return 2
+    #         elif value < 0.6667:
+    #             return 3
+    #         elif value < 0.8333:
+    #             return 4
+    #         else:
+    #             return 5
 
-        # Compute state index with all users' data and energy states
-        state_idx = j * (self.num_users * (4 ** (2 * self.num_users)) * 4) + \
-            t * ((4 ** (2 * self.num_users)) * 4)
-        for u in range(self.num_users):
-            state_idx += data_bins[u] * (4 ** (2 * self.num_users - 2 * u - 1))
-            state_idx += energy_bins[u] * \
-                (4 ** (2 * self.num_users - 2 * u - 2))
-        state_idx += q_bin
+    #     j = self.jammer_state  # Binary: 0 or 1
+    #     t = self.time_slot     # Discrete: 0 to num_users-1
+    #     # Bin all users' data states
+    #     data_bins = [discretize(d / d_queue_size) for d in self.data_states]
+    #     # Bin all users' energy states
+    #     energy_bins = [discretize(e / e_queue_size) for e in self.energy_states]
+    #     avg_q = np.mean(self.data_states) / d_queue_size
+    #     q_bin = discretize(avg_q)
 
-        total_states = 2 * self.num_users * \
-            (4 ** (2 * self.num_users + 1)) 
-        assert 0 <= state_idx < total_states, f"Invalid state_idx {state_idx}"
-        return state_idx
+    #     # Compute state index with all users' data and energy states
+    #     state_idx = j * (self.num_users * (6 ** (2 * self.num_users)) * 6) + \
+    #                 t * ((6 ** (2 * self.num_users)) * 6)
+    #     for u in range(self.num_users):
+    #         state_idx += data_bins[u] * (6 ** (2 * self.num_users - 2 * u - 1))
+    #         state_idx += energy_bins[u] * (6 ** (2 * self.num_users - 2 * u - 2))
+    #     state_idx += q_bin
+
+    #     total_states = 2 * self.num_users * (6 ** (2 * self.num_users + 1))
+    #     assert 0 <= state_idx < total_states, f"Invalid state_idx {state_idx}"
+    #     return state_idx
 
     def get_discrete_state(self, user_idx):
         def discretize(value):
-            if value < 0.25:
+            if value < 0.1667:
                 return 0
-            elif value < 0.5:
+            elif value < 0.3333:
                 return 1
-            elif value < 0.75:
+            elif value < 0.5:
                 return 2
-            else:
+            elif value < 0.6667:
                 return 3
-                
+            elif value < 0.8333:
+                return 4
+            else:
+                return 5
+
         j = self.jammer_state
         t = self.time_slot
         d = self.data_states[user_idx] / d_queue_size
@@ -81,15 +89,27 @@ class Environment:
         q_bin = discretize(avg_q)
         e_avg_bin = discretize(avg_e)
 
-        state_idx = (j * self.num_users * 4 * 4 * 4 * 4 +
-                    t * 4 * 4 * 4 * 4 +
-                    d_bin * 4 * 4 * 4 +
-                    e_bin * 4 * 4 +
-                    q_bin * 4 +
+        state_idx = (j * self.num_users * 6 * 6 * 6 * 6 +
+                    t * 6 * 6 * 6 * 6 +
+                    d_bin * 6 * 6 * 6 +
+                    e_bin * 6 * 6 +
+                    q_bin * 6 +
                     e_avg_bin)
-        total_states = 2 * self.num_users * 4 * 4 * 4 * 4
-        assert 0 <= state_idx < total_states, f"Invalid state_idx {state_idx}"
-        return state_idx
+
+        data_state = min(d_queue_size - 1, int(self.data_states[user_idx]))
+        energy_state = min(e_queue_size - 1, int(self.energy_states[user_idx]))
+        # Ensure q_bin and e_avg_bin are in [0, 5]
+        q_bin = min(5, max(0, int(q_bin)))
+        e_avg_bin = min(5, max(0, int(e_avg_bin)))
+        state = (
+            user_idx * 2 * d_queue_size * e_queue_size * 6 * 6 +
+            self.jammer_state * d_queue_size * e_queue_size * 6 * 6 +
+            data_state * e_queue_size * 6 * 6 +
+            energy_state * 6 * 6 +
+            q_bin * 6 +
+            e_avg_bin
+        )
+        return state
 
     def get_possible_actions(self, user_idx):
         list_actions = [0]  # Idle always possible
