@@ -98,7 +98,8 @@ class DeepQLearningAgent:
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.LongTensor(actions).to(self.device)
         next_states = torch.FloatTensor(next_states).to(self.device)
-        individual_rewards = torch.FloatTensor(individual_rewards).to(self.device)
+        individual_rewards = torch.FloatTensor(
+            individual_rewards).to(self.device)
 
         losses = []
         for user_idx in range(self.num_users):
@@ -108,7 +109,8 @@ class DeepQLearningAgent:
                 next_states).detach()
             max_next_q_values = target_q_values.max(dim=1)[0]
             # target_q = rewards + gamma_deepQ * max_next_q_values
-            target_q = individual_rewards[:, user_idx] + gamma_deepQ * max_next_q_values
+            target_q = individual_rewards[:, user_idx] + \
+                gamma_deepQ * max_next_q_values
             q_action = q_values.gather(
                 1, actions[:, user_idx].unsqueeze(1)).squeeze(1)
             loss = self.criterion(q_action, target_q)
@@ -154,26 +156,26 @@ class DeepQLearningAgent:
         plt.close()
         print(f"Saved training progress plot to {filename}")
 
-    def log_to_file(self, filename, iteration, avg_total, avg_per_user, packet_loss_ratios, avg_losses, count_change, packet_lost_by_transmit):
+    def log_to_file(self, filename, iteration, avg_total, avg_per_user, packet_loss_ratios, avg_losses, count_change, packet_lost_by_transmit, energy_used):
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         header = "Iteration\tAvg_Total_Reward\t" + "\t".join([f"Avg_Reward_User_{u}" for u in range(self.num_users)]) + \
                  "\t" + "\t".join([f"Packet_Loss_Ratio_User_{u}" for u in range(self.num_users)]) + \
                  "\t" + "\t".join([f"Packet_Loss_By_Transmit_Ratio_User_{u}" for u in range(self.num_users)]) + \
                  "\t" + \
             "\t".join([f"Avg_Loss_User_{u}" for u in range(
-                self.num_users)]) + "\tCount_Change" + "\n"
+                self.num_users)]) + "\tEnergy_used" + "\tCount_Change" + "\n"
         data_line = f"{iteration}\t{avg_total:.4f}\t" + \
             "\t".join([f"{r:.4f}" for r in avg_per_user]) + "\t" + \
             "\t".join([f"{r:.4f}" for r in packet_loss_ratios]) + "\t" + \
             "\t".join([f"{r:.4f}" for r in packet_lost_by_transmit]) + "\t" + \
-            "\t".join([f"{l:.6f}" for l in avg_losses]) + f"\t{count_change}\n"
+            "\t".join([f"{l:.6f}" for l in avg_losses]) + \
+            f"\t{energy_used}" + f"\t{count_change}\n"
         if not os.path.exists(filename):
             with open(filename, 'w') as f:
                 f.write(header)
         with open(filename, 'a') as f:
             f.write(data_line)
 
-    
     def train(self, save_path="multi_user_checkpoint_tdma_reverted.pth",
               plot_path="multi_user_training_progress_tdma_reverted.png",
               log_path="log/multi_user_training_data_tdma_reverted.txt"):
@@ -184,6 +186,7 @@ class DeepQLearningAgent:
         total_packets_lost_by_transmit = [0] * self.num_users
         total_history = []
         per_user_history = [[] for _ in range(self.num_users)]
+        total_energy_used = []
         loss_history = [[] for _ in range(self.num_users)]
         state = self.env.get_state()
         transmission_actions = [1, 3, 4, 5, 6]
@@ -285,9 +288,10 @@ class DeepQLearningAgent:
                         actions[u] = action
 
             # Environment step
-            total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit = self.env.step(
+            total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit, energy_used = self.env.step(
                 actions)
             total_reward += total_reward_step
+            total_energy_used.append(energy_used)
             packetLost = 0
             for u in range(self.num_users):
                 per_user_totals[u] += individual_rewards[u]
@@ -329,6 +333,7 @@ class DeepQLearningAgent:
                                                   for u in range(self.num_users)]
                 avg_loss_per_user = [np.mean(loss_history[u]) for u in range(
                     self.num_users)] if loss_history[0] else [0] * self.num_users
+                avg_energy_used = np.mean(total_energy_used[-step:])
                 if losses is not None:
                     loss_str = ", ".join(
                         [f"User {u}: {avg_loss_per_user[u]:.6f}" for u in range(self.num_users)])
@@ -336,19 +341,21 @@ class DeepQLearningAgent:
                           f"Avg Per-User Rewards: {[f'{r:.4f}' for r in avg_per_user]}, "
                           f"Avg Losses: [{loss_str}], "
                           f"Packet Loss Ratios: {[f'{r:.4f}' for r in packet_loss_ratios]}, "
-                          f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_loss_by_transmit_ratios]}")
+                          f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_loss_by_transmit_ratios]}"
+                          f"Energy Efficiency: {avg_total/avg_energy_used:.4f}")
                 else:
                     print(f"Time Slot {i + 1}, Avg Total Reward: {avg_total:.4f}, "
                           f"Avg Per-User Rewards: {[f'{r:.4f}' for r in avg_per_user]}, "
                           f"Packet Loss Ratios: {[f'{r:.4f}' for r in packet_loss_ratios]}, "
-                          f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_loss_by_transmit_ratios]}")
+                          f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_loss_by_transmit_ratios]}"
+                          f"Energy Used: {avg_total/avg_energy_used:.4f}")
                 self.save_models(save_path)
                 self.log_to_file(log_path, i + 1, avg_total,
-                                 avg_per_user, packet_loss_ratios, avg_loss_per_user, count_changes[-1], packet_loss_by_transmit_ratios)
+                                 avg_per_user, packet_loss_ratios, avg_loss_per_user, count_changes[-1], packet_loss_by_transmit_ratios, sum(total_energy_used[-step:]))
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_final10/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_2.png")
+                                       f"plot/test_nu/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_2.png")
 
             self.epsilon = max(
                 self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -363,7 +370,7 @@ class DeepQLearningAgent:
         self.save_models(save_path)
         self.plot_progress(total_history, per_user_history, plot_path)
         self.log_to_file(log_path, T, total_reward / T, avg_per_user_final,
-                         final_packet_loss_ratios, final_avg_loss_per_user, count_changes[-1], final_packet_loss_ratios_by_transmit)
+                         final_packet_loss_ratios, final_avg_loss_per_user, count_changes[-1], final_packet_loss_ratios_by_transmit, sum(total_energy_used[-step:]))
         print(
             f"Final Packet Loss Ratios: {[f'{r:.4f}' for r in final_packet_loss_ratios]}")
         print(
@@ -376,9 +383,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_final10/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_2.pth",
-        plot_path=f"plot/test_final10/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_2.png",
-        log_path=f"log/test_final10/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_2.txt"
+        save_path=f"checkpoint/test_nu/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_1.pth",
+        plot_path=f"plot/test_nu/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_1.png",
+        log_path=f"log/test_nu/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_1.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

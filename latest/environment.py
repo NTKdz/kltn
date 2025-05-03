@@ -1,3 +1,4 @@
+from calendar import c
 from parameters import *
 import numpy as np
 import random
@@ -5,62 +6,25 @@ from scipy.stats import poisson
 
 
 class Environment:
-    def __init__(self, num_users=num_users, num_channels=num_channels):
+    def __init__(self, num_users=num_users, num_channels=num_channels, backscatter=True):
         self.num_users = num_users
         self.num_channels = num_channels
         self.jammer_state = 0
         self.data_states = [0] * num_users
         self.energy_states = [0] * num_users
         self.time_slot = 0
+        self.current_d_bj = None
+        self.current_d_ra = None
+        self.current_e_hj = None
+        self.backscatter = backscatter
 
     def get_state(self):
-        # Include average queue size of other users (normalized)
         avg_d_queue = np.mean(self.data_states) / d_queue_size
         avg_e_queue = np.mean(self.energy_states) / e_queue_size
 
-        # return np.array([self.jammer_state, self.time_slot] +
-        #                 [d / d_queue_size for d in self.data_states] +
-        #                 [e / e_queue_size for e in self.energy_states] +
-        #                 [avg_other_queue])
         return np.array([self.jammer_state, self.time_slot] + self.data_states +
                         self.energy_states + [avg_d_queue] +
                         [avg_e_queue])
-
-    # def get_discrete_state(self, user_idx):
-    #     def discretize(value):
-    #         if value < 0.1667:
-    #             return 0
-    #         elif value < 0.3333:
-    #             return 1
-    #         elif value < 0.5:
-    #             return 2
-    #         elif value < 0.6667:
-    #             return 3
-    #         elif value < 0.8333:
-    #             return 4
-    #         else:
-    #             return 5
-
-    #     j = self.jammer_state  # Binary: 0 or 1
-    #     t = self.time_slot     # Discrete: 0 to num_users-1
-    #     # Bin all users' data states
-    #     data_bins = [discretize(d / d_queue_size) for d in self.data_states]
-    #     # Bin all users' energy states
-    #     energy_bins = [discretize(e / e_queue_size) for e in self.energy_states]
-    #     avg_q = np.mean(self.data_states) / d_queue_size
-    #     q_bin = discretize(avg_q)
-
-    #     # Compute state index with all users' data and energy states
-    #     state_idx = j * (self.num_users * (6 ** (2 * self.num_users)) * 6) + \
-    #                 t * ((6 ** (2 * self.num_users)) * 6)
-    #     for u in range(self.num_users):
-    #         state_idx += data_bins[u] * (6 ** (2 * self.num_users - 2 * u - 1))
-    #         state_idx += energy_bins[u] * (6 ** (2 * self.num_users - 2 * u - 2))
-    #     state_idx += q_bin
-
-    #     total_states = 2 * self.num_users * (6 ** (2 * self.num_users + 1))
-    #     assert 0 <= state_idx < total_states, f"Invalid state_idx {state_idx}"
-    #     return state_idx
 
     def get_discrete_state(self, user_idx):
         def discretize(value):
@@ -77,30 +41,16 @@ class Environment:
             else:
                 return 5
 
-        j = self.jammer_state
-        t = self.time_slot
-        d = self.data_states[user_idx] / d_queue_size
-        e = self.energy_states[user_idx] / e_queue_size
         avg_q = np.mean(self.data_states) / d_queue_size
         avg_e = np.mean(self.energy_states) / e_queue_size
 
-        d_bin = discretize(d)
-        e_bin = discretize(e)
         q_bin = discretize(avg_q)
         e_avg_bin = discretize(avg_e)
 
-        state_idx = (j * self.num_users * 6 * 6 * 6 * 6 +
-                    t * 6 * 6 * 6 * 6 +
-                    d_bin * 6 * 6 * 6 +
-                    e_bin * 6 * 6 +
-                    q_bin * 6 +
-                    e_avg_bin)
-
-        data_state = min(d_queue_size - 1, int(self.data_states[user_idx]))
-        energy_state = min(e_queue_size - 1, int(self.energy_states[user_idx]))
-        # Ensure q_bin and e_avg_bin are in [0, 5]
-        q_bin = min(5, max(0, int(q_bin)))
-        e_avg_bin = min(5, max(0, int(e_avg_bin)))
+        data_state = self.data_states[user_idx]
+        energy_state = self.energy_states[user_idx]
+        # q_bin = min(5, max(0, int(q_bin)))
+        # e_avg_bin = min(5, max(0, int(e_avg_bin)))
         state = (
             user_idx * 2 * d_queue_size * e_queue_size * 6 * 6 +
             self.jammer_state * d_queue_size * e_queue_size * 6 * 6 +
@@ -111,13 +61,64 @@ class Environment:
         )
         return state
 
+    def greedy_action(self, user_idx):
+        possible_actions = self.get_possible_actions(user_idx)
+        if user_idx == self.time_slot:  # Active user
+            if self.jammer_state == 0 and 1 in possible_actions:
+                return 1  # Active transmit when jammer idle
+            elif self.jammer_state == 1:
+                if 3 in possible_actions:
+                    return 3  # Backscatter if data available
+                elif 2 in possible_actions:
+                    return 2  # Harvest energy
+        else:  # Inactive user
+            if self.jammer_state == 1 and 2 in possible_actions:
+                return 2  # Harvest energy when jammed
+        return 0  # Default to idle
+
+    def sinr_based_action(self, user_idx):
+        possible_actions = self.get_possible_actions(user_idx)
+        if user_idx == self.time_slot:  # Active user
+            if self.jammer_state == 0 and 1 in possible_actions:
+                return 1  # Active transmit when jammer idle (high SINR)
+            elif self.jammer_state == 1:
+                # Use stored jamming power level (SINR proxy)
+                d_bj = self.current_d_bj if self.current_d_bj is not None else random.choices(
+                    d_bj_arr, nu_p, k=1)[0]
+                d_ra = self.current_d_ra if self.current_d_ra is not None else random.choices(
+                    dt_ra_arr, nu_p, k=1)[0]
+
+                curr = []
+                transmit = False
+                for action in possible_actions:
+                    if action in [3, 4, 5, 6]:
+                        curr.append(action)
+                        transmit = True
+                if transmit:
+                    return random.choice(curr)  # Randomly choose among actions
+                else:
+                    return 2  # Harvest energy if no other actions available
+        else:  # Inactive user
+            if self.jammer_state == 1 and 2 in possible_actions:
+                return 2  # Harvest energy when jammed
+        return 0  # Default to idle
+
+    def random_action_strategy(self, user_idx):
+        possible_actions = self.get_possible_actions(user_idx)
+        if user_idx == self.time_slot:  # Active user
+            return random.choice(possible_actions)  # Random action for
+        else:
+            actions = [0]
+            if 2 in possible_actions:
+                actions.append(2)
+
     def get_possible_actions(self, user_idx):
         list_actions = [0]  # Idle always possible
         if self.jammer_state == 0 and self.data_states[user_idx] > 0 and self.energy_states[user_idx] >= e_t:
             list_actions.append(1)  # Active transmit
         if self.jammer_state == 1:
-            list_actions.append(2)  # Harvest energy
-            if self.data_states[user_idx] > 0:
+            list_actions.append(2)
+            if self.data_states[user_idx] > 0 and self.backscatter:
                 list_actions.append(3)  # Backscatter
             if self.energy_states[user_idx] >= e_t:
                 list_actions.extend([4, 5, 6])  # Rate adaptation
@@ -147,15 +148,18 @@ class Environment:
             elif action == 1 and self.jammer_state == 0:
                 rewards[i] = self.active_transmit(i, d_t)
             elif action == 2 and self.jammer_state == 1:
-                rewards[i] = random.choices(e_hj_arr, nu_p, k=1)[0]
+                rewards[i] = self.current_e_hj if self.current_e_hj is not None else random.choices(
+                    e_hj_arr, nu_p, k=1)[0]
             elif action == 3 and self.jammer_state == 1:
-                d_bj = random.choices(d_bj_arr, nu_p, k=1)[0]
+                d_bj = self.current_d_bj if self.current_d_bj is not None else random.choices(
+                    d_bj_arr, nu_p, k=1)[0]
                 max_rate = min(b_dagger, self.data_states[i])
                 rewards[i] = min(d_bj, self.data_states[i])
                 if max_rate > rewards[i]:
                     losses[i] = max_rate - rewards[i]
             elif action in [4, 5, 6] and self.jammer_state == 1:
-                max_ra = random.choices(dt_ra_arr, nu_p, k=1)[0]
+                max_ra = self.current_d_ra if self.current_d_ra is not None else random.choices(
+                    dt_ra_arr, nu_p, k=1)[0]
                 idx = action - 4
                 rewards[i] = self.active_transmit(i, dt_ra_arr[idx])
                 if dt_ra_arr[idx] > max_ra:
@@ -169,6 +173,7 @@ class Environment:
         packets_arrived = [0] * self.num_users
         packets_lost = [0] * self.num_users
         packets_lost_by_transmit = [0] * self.num_users
+        energy_used = 0
 
         for i in range(self.num_users):
             if actions[i] == 1:
@@ -190,6 +195,7 @@ class Environment:
                         0, self.data_states[i] - rewards[i])
                     self.energy_states[i] = max(
                         0, self.energy_states[i] - rewards[i] * e_t)
+                    energy_used += rewards[i] * e_t
                 packets_lost[i] += losses[i]
 
         # Data arrival
@@ -214,4 +220,4 @@ class Environment:
         self.time_slot = (self.time_slot + 1) % self.num_users
         total_reward = sum(rewards)
         next_state = self.get_state()
-        return total_reward, next_state, rewards, packets_arrived, packets_lost, packets_lost_by_transmit
+        return total_reward, next_state, rewards, packets_arrived, packets_lost, packets_lost_by_transmit, energy_used

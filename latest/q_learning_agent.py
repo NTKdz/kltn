@@ -1,4 +1,5 @@
 # qlearning.py
+from typing import final
 from environment import Environment
 from parameters import *
 import numpy as np
@@ -16,7 +17,7 @@ class QLearningAgent:
                          for _ in range(self.num_users)]
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.9999
+        self.epsilon_decay = 0.9
         self.count_changes = []
 
         if load_path and os.path.exists(load_path):
@@ -75,17 +76,17 @@ class QLearningAgent:
         plt.close()
         print(f"Saved training progress plot to {filename}")
 
-    def log_to_file(self, filename, iteration, avg_total, avg_per_user, packet_loss_ratios, count_change, packet_lost_by_transmit):
+    def log_to_file(self, filename, iteration, avg_total, avg_per_user, packet_loss_ratios, count_change, packet_lost_by_transmit, energy_used):
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         header = "Iteration\tAvg_Total_Reward\t" + "\t".join([f"Avg_Reward_User_{u}" for u in range(self.num_users)]) + \
                  "\t" + "\t".join([f"Packet_Loss_Ratio_User_{u}" for u in range(self.num_users)]) + \
                  "\t" + "\t".join([f"Packet_Loss_By_Transmit_Ratio_User_{u}" for u in range(self.num_users)]) + \
-                 "\tCount_Change\n"
+                 "\Energy_Used"+"\tCount_Change\n"
         data_line = f"{iteration}\t{avg_total:.4f}\t" + \
             "\t".join([f"{r:.4f}" for r in avg_per_user]) + "\t" + \
             "\t".join([f"{r:.4f}" for r in packet_loss_ratios]) + "\t" + \
             "\t".join([f"{r:.4f}" for r in packet_lost_by_transmit]) + \
-            f"\t{count_change}\n"
+            f"\t{energy_used}"+f"\t{count_change}\n"
         if not os.path.exists(filename):
             with open(filename, 'w') as f:
                 f.write(header)
@@ -101,6 +102,7 @@ class QLearningAgent:
         total_packets_lost = [0] * self.num_users
         total_packets_lost_by_transmit = [0] * self.num_users
         total_history = []
+        total_energy_used = []
         per_user_history = [[] for _ in range(self.num_users)]
         state = []
         for u in range(self.num_users):
@@ -122,19 +124,19 @@ class QLearningAgent:
             if current_action in transmission_actions:
                 actions[current_agent] = current_action
                 for u in range(self.num_users):
-                        if u != current_agent:
-                            possible_actions = [a for a in self.env.get_possible_actions(
-                                u) if a not in transmission_actions]
-                            if not possible_actions:
-                                # Ensure idle is always possible
-                                possible_actions = [0]
-                            if random.random() < self.epsilon:
-                                action = random.choice(possible_actions)
-                            else:
-                                discrete_state = self.env.get_discrete_state(u)
-                                action = max(
-                                    possible_actions, key=lambda a: self.q_tables[u][discrete_state, a])
-                            actions[u] = action
+                    if u != current_agent:
+                        possible_actions = [a for a in self.env.get_possible_actions(
+                            u) if a not in transmission_actions]
+                        if not possible_actions:
+                            # Ensure idle is always possible
+                            possible_actions = [0]
+                        if random.random() < self.epsilon:
+                            action = random.choice(possible_actions)
+                        else:
+                            discrete_state = self.env.get_discrete_state(u)
+                            action = max(
+                                possible_actions, key=lambda a: self.q_tables[u][discrete_state, a])
+                        actions[u] = action
             else:
                 count_change += 1
                 # Step 3: Current agent does not transmit, evaluate other agents
@@ -189,10 +191,10 @@ class QLearningAgent:
                         actions[u] = action
 
             # Environment step
-            total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit = self.env.step(
+            total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit, energy_used = self.env.step(
                 actions)
             total_reward += total_reward_step
-
+            total_energy_used.append(energy_used)
             # Update Q-tables for all users
             for u in range(self.num_users):
                 self.update_q_table(
@@ -228,18 +230,21 @@ class QLearningAgent:
                                       for u in range(self.num_users)]
                 packet_loss_by_transmit_ratios = [total_packets_lost_by_transmit[u] / (total_packets_arrived[u] + total_packets_lost_by_transmit[u]) if total_packets_arrived[u] > 0 else 0
                                                   for u in range(self.num_users)]
+                avg_energy_used = np.mean(total_energy_used[-step:])
                 print(f"Time Slot {i + 1}, Avg Total Reward: {avg_total:.4f}, "
                       f"Avg Per-User Rewards: {[f'{r:.4f}' for r in avg_per_user]}, "
                       f"Packet Loss Ratios: {[f'{r:.4f}' for r in packet_loss_ratios]}, "
-                      f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_loss_by_transmit_ratios]}")
+                      f"Packet Loss Ratios By Transmit: {[f'{r:.4f}' for r in packet_loss_by_transmit_ratios]}"
+                      f"Energy Efficiency: {avg_total/avg_energy_used:.4f}")
                 # self.save_q_tables(save_path)
                 self.log_to_file(log_path, i + 1, avg_total, avg_per_user,
-                                 packet_loss_ratios, count_change, packet_loss_by_transmit_ratios)
+                                 packet_loss_ratios, count_change, packet_loss_by_transmit_ratios, sum(total_energy_used[-step:]))
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
                                        f"plot/test_q1/multi_user_progress_at_100k_qlearning_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}1.png")
-            self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+            self.epsilon = max(
+                self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         avg_per_user_final = [per_user_totals[u] /
                               T for u in range(self.num_users)]
@@ -247,10 +252,11 @@ class QLearningAgent:
                                     for u in range(self.num_users)]
         final_packet_loss_ratios_by_transmit = [total_packets_lost_by_transmit[u] / (total_packets_arrived[u] + total_packets_lost_by_transmit[u]) if total_packets_arrived[u] > 0 else 0
                                                 for u in range(self.num_users)]
+        final_energy_used = np.mean(total_energy_used[-step:])
         # self.save_q_tables(save_path)
         self.plot_progress(total_history, per_user_history, plot_path)
         self.log_to_file(log_path, T, total_reward / T, avg_per_user_final,
-                         final_packet_loss_ratios, count_change, final_packet_loss_ratios_by_transmit)
+                         final_packet_loss_ratios, count_change, final_packet_loss_ratios_by_transmit, sum(total_energy_used[-step:]))
         print(
             f"Final Packet Loss Ratios: {[f'{r:.4f}' for r in final_packet_loss_ratios]}")
         print(
