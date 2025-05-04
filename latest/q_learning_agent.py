@@ -17,7 +17,7 @@ class QLearningAgent:
                          for _ in range(self.num_users)]
         self.epsilon = 1.0
         self.epsilon_min = 0.01
-        self.epsilon_decay = 0.9
+        self.epsilon_decay = 0.9999
         self.count_changes = []
 
         if load_path and os.path.exists(load_path):
@@ -81,7 +81,7 @@ class QLearningAgent:
         header = "Iteration\tAvg_Total_Reward\t" + "\t".join([f"Avg_Reward_User_{u}" for u in range(self.num_users)]) + \
                  "\t" + "\t".join([f"Packet_Loss_Ratio_User_{u}" for u in range(self.num_users)]) + \
                  "\t" + "\t".join([f"Packet_Loss_By_Transmit_Ratio_User_{u}" for u in range(self.num_users)]) + \
-                 "\Energy_Used"+"\tCount_Change\n"
+                 "\tEnergy_Used"+"\tCount_Change\n"
         data_line = f"{iteration}\t{avg_total:.4f}\t" + \
             "\t".join([f"{r:.4f}" for r in avg_per_user]) + "\t" + \
             "\t".join([f"{r:.4f}" for r in packet_loss_ratios]) + "\t" + \
@@ -242,7 +242,7 @@ class QLearningAgent:
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_q1/multi_user_progress_at_100k_qlearning_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}1.png")
+                                       f"plot/test_q1/multi_user_progress_at_100k_qlearning_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}2.png")
             self.epsilon = max(
                 self.epsilon_min, self.epsilon * self.epsilon_decay)
 
@@ -267,9 +267,9 @@ class QLearningAgent:
 if __name__ == "__main__":
     agent = QLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_q1/multi_user_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}1.npz",
-        plot_path=f"plot/test_q1/multi_user_training_progress_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}1.png",
-        log_path=f"log/test_q1/multi_user_training_data_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}1.txt"
+        save_path=f"checkpoint/test_q1/multi_user_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}2.npz",
+        plot_path=f"plot/test_q1/multi_user_training_progress_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}2.png",
+        log_path=f"log/test_q1/multi_user_training_data_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}2.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

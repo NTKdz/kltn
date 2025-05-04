@@ -1,4 +1,4 @@
-nu = 0.2  # Probability jammer is idle
+nu = 0.9  # Probability jammer is idle
 arrival_rate = 3  # Data arrival rate
 nu_p = [0.6, 0.2, 0.2]  # Jamming power level probabilities
 d_t = 4  # Packets per active transmission
@@ -23,5 +23,5 @@ learning_rate_deepQ = 0.0001
 gamma_deepQ = 0.99
 learning_rate_Q = 0.1
 gamma_Q = 0.9
-T = 100000  # Training iterations
+T = 200000  # Training iterations
 step = 1000
