@@ -1,4 +1,0 @@
-Iteration	Avg_Total_Reward	Avg_Reward_User_0	Avg_Reward_User_1	Packet_Loss_Ratio_User_0	Packet_Loss_Ratio_User_1	Avg_Loss_User_0	Avg_Loss_User_1
-1000	0.6270	0.3100	0.3170	0.7693	0.7557	0.895828	0.886620
-2000	0.6725	0.3300	0.3425	0.7693	0.7575	0.906577	0.918637
-3000	0.7047	0.3360	0.3687	0.7703	0.7476	0.921803	0.939174
