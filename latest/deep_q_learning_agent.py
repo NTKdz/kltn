@@ -86,12 +86,6 @@ class DeepQLearningAgent:
     def replay(self):
         if len(self.memory) < batch_size:
             return None
-        # batch = random.sample(self.memory, batch_size)
-        # states, actions, rewards, next_states, _ = zip(*batch)
-        # states = torch.FloatTensor(states).to(self.device)
-        # actions = torch.LongTensor(actions).to(self.device)
-        # rewards = torch.FloatTensor(rewards).to(self.device)
-        # next_states = torch.FloatTensor(next_states).to(self.device)
 
         batch = random.sample(self.memory, batch_size)
         states, actions, _, next_states, individual_rewards = zip(*batch)
@@ -108,7 +102,6 @@ class DeepQLearningAgent:
             target_q_values = self.target_models[user_idx](
                 next_states).detach()
             max_next_q_values = target_q_values.max(dim=1)[0]
-            # target_q = rewards + gamma_deepQ * max_next_q_values
             target_q = individual_rewards[:, user_idx] + \
                 gamma_deepQ * max_next_q_values
             q_action = q_values.gather(
@@ -355,7 +348,7 @@ class DeepQLearningAgent:
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_nu/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_nu_{nu}_2.png")
+                                       f"plot/test_nu1/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_nu_{nu}_2.png")
 
             self.epsilon = max(
                 self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -383,9 +376,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_nu/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_2.pth",
-        plot_path=f"plot/test_nu/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_2.png",
-        log_path=f"log/test_nu/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_2.txt"
+        save_path=f"checkpoint/test_nu1/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_1.pth",
+        plot_path=f"plot/test_nu1/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_1.png",
+        log_path=f"log/test_nu1/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_1.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

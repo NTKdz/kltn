@@ -227,7 +227,7 @@ class DeepQLearningAgent:
                     actions[u] = action
 
             # Environment step
-            total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit = self.env.step(
+            total_reward_step, next_state, individual_rewards, packets_arrived, packets_lost, packets_lost_by_transmit, energy_used = self.env.step(
                 actions)
             total_reward += total_reward_step
             packetLost = 0
@@ -293,7 +293,7 @@ class DeepQLearningAgent:
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_final10/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_3.png")
+                                       f"plot/test_final11/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_fixed_1.png")
 
             self.epsilon = max(
                 self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -323,9 +323,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_final10/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_3.pth",
-        plot_path=f"plot/test_final10/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_3.png",
-        log_path=f"log/test_final10/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_3.txt"
+        save_path=f"checkpoint/test_final11/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_fixed_1.pth",
+        plot_path=f"plot/test_final11/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_fixed_1.png",
+        log_path=f"log/test_final11/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_fixed_1.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

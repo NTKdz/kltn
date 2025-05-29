@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 class QLearningAgent:
     def __init__(self, num_users=num_users, load_path=None):
-        self.env = Environment(num_users)
+        self.env = Environment(num_users, backscatter=True)
         self.num_users = num_users
         # Initialize Q-table: [num_states, num_actions] for each user
         self.q_tables = [np.zeros((num_states, num_actions))
@@ -242,7 +242,7 @@ class QLearningAgent:
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_q1/multi_user_progress_at_100k_qlearning_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}2.png")
+                                       f"plot/test_q2/multi_user_progress_at_100k_qlearning_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}1.png")
             self.epsilon = max(
                 self.epsilon_min, self.epsilon * self.epsilon_decay)
 
@@ -267,9 +267,9 @@ class QLearningAgent:
 if __name__ == "__main__":
     agent = QLearningAgent(load_path=None)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_q1/multi_user_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}2.npz",
-        plot_path=f"plot/test_q1/multi_user_training_progress_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}2.png",
-        log_path=f"log/test_q1/multi_user_training_data_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}2.txt"
+        save_path=f"checkpoint/test_q2/multi_user_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}1.npz",
+        plot_path=f"plot/test_q2/multi_user_training_progress_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}1.png",
+        log_path=f"log/test_q2/multi_user_training_data_qlearning_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}1.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

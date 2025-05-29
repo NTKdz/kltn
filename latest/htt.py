@@ -356,7 +356,7 @@ class DeepQLearningAgent:
 
                 if (i + 1) == 100000:
                     self.plot_progress(total_history, per_user_history,
-                                       f"plot/test_nu/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_nu_{nu}_HTT2.png")
+                                       f"plot/test_final11/multi_user_progress_at_100k_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{self.epsilon_decay}_nu_{nu}_HTT1.png")
 
             self.epsilon = max(
                 self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -385,9 +385,9 @@ class DeepQLearningAgent:
 if __name__ == "__main__":
     agent = DeepQLearningAgent(load_path=None, backscatter=False)
     avg_total_multi, avg_per_user_multi = agent.train(
-        save_path=f"checkpoint/test_nu/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_HTT2.pth",
-        plot_path=f"plot/test_nu/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_HTT2.png",
-        log_path=f"log/test_nu/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_HTT2.txt"
+        save_path=f"checkpoint/test_final11/multi_user_checkpoint_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_HTT1.pth",
+        plot_path=f"plot/test_final11/multi_user_training_progress_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_HTT1.png",
+        log_path=f"log/test_final11/multi_user_training_data_tdma_reverted_{num_users}_rate_{arrival_rate}_eps_{agent.epsilon_decay}_nu_{nu}_HTT1.txt"
     )
     print(f"Multi-user total average reward: {avg_total_multi:.4f}")
     print(

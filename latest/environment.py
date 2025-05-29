@@ -6,16 +6,11 @@ from scipy.stats import poisson
 
 
 class Environment:
-    def __init__(self, num_users=num_users, num_channels=num_channels, backscatter=True):
+    def __init__(self, num_users=num_users, backscatter=True):
         self.num_users = num_users
-        self.num_channels = num_channels
         self.jammer_state = 0
         self.data_states = [0] * num_users
         self.energy_states = [0] * num_users
-        self.time_slot = 0
-        self.current_d_bj = None
-        self.current_d_ra = None
-        self.current_e_hj = None
         self.backscatter = backscatter
 
     def get_state(self):
@@ -49,8 +44,6 @@ class Environment:
 
         data_state = self.data_states[user_idx]
         energy_state = self.energy_states[user_idx]
-        # q_bin = min(5, max(0, int(q_bin)))
-        # e_avg_bin = min(5, max(0, int(e_avg_bin)))
         state = (
             user_idx * 2 * d_queue_size * e_queue_size * 6 * 6 +
             self.jammer_state * d_queue_size * e_queue_size * 6 * 6 +
@@ -60,57 +53,15 @@ class Environment:
             e_avg_bin
         )
         return state
-
-    def greedy_action(self, user_idx):
-        possible_actions = self.get_possible_actions(user_idx)
-        if user_idx == self.time_slot:  # Active user
-            if self.jammer_state == 0 and 1 in possible_actions:
-                return 1  # Active transmit when jammer idle
-            elif self.jammer_state == 1:
-                if 3 in possible_actions:
-                    return 3  # Backscatter if data available
-                elif 2 in possible_actions:
-                    return 2  # Harvest energy
-        else:  # Inactive user
-            if self.jammer_state == 1 and 2 in possible_actions:
-                return 2  # Harvest energy when jammed
-        return 0  # Default to idle
-
-    def sinr_based_action(self, user_idx):
-        possible_actions = self.get_possible_actions(user_idx)
-        if user_idx == self.time_slot:  # Active user
-            if self.jammer_state == 0 and 1 in possible_actions:
-                return 1  # Active transmit when jammer idle (high SINR)
-            elif self.jammer_state == 1:
-                # Use stored jamming power level (SINR proxy)
-                d_bj = self.current_d_bj if self.current_d_bj is not None else random.choices(
-                    d_bj_arr, nu_p, k=1)[0]
-                d_ra = self.current_d_ra if self.current_d_ra is not None else random.choices(
-                    dt_ra_arr, nu_p, k=1)[0]
-
-                curr = []
-                transmit = False
-                for action in possible_actions:
-                    if action in [3, 4, 5, 6]:
-                        curr.append(action)
-                        transmit = True
-                if transmit:
-                    return random.choice(curr)  # Randomly choose among actions
-                else:
-                    return 2  # Harvest energy if no other actions available
-        else:  # Inactive user
-            if self.jammer_state == 1 and 2 in possible_actions:
-                return 2  # Harvest energy when jammed
-        return 0  # Default to idle
-
-    def random_action_strategy(self, user_idx):
-        possible_actions = self.get_possible_actions(user_idx)
-        if user_idx == self.time_slot:  # Active user
-            return random.choice(possible_actions)  # Random action for
-        else:
-            actions = [0]
-            if 2 in possible_actions:
-                actions.append(2)
+    
+    # def random_action_strategy(self, user_idx):
+    #     possible_actions = self.get_possible_actions(user_idx)
+    #     if user_idx == self.time_slot:  # Active user
+    #         return random.choice(possible_actions)  # Random action for
+    #     else:
+    #         actions = [0]
+    #         if 2 in possible_actions:
+    #             actions.append(2)
 
     def get_possible_actions(self, user_idx):
         list_actions = [0]  # Idle always possible
@@ -148,18 +99,15 @@ class Environment:
             elif action == 1 and self.jammer_state == 0:
                 rewards[i] = self.active_transmit(i, d_t)
             elif action == 2 and self.jammer_state == 1:
-                rewards[i] = self.current_e_hj if self.current_e_hj is not None else random.choices(
-                    e_hj_arr, nu_p, k=1)[0]
+                rewards[i] = random.choices(e_hj_arr, nu_p, k=1)[0]
             elif action == 3 and self.jammer_state == 1:
-                d_bj = self.current_d_bj if self.current_d_bj is not None else random.choices(
-                    d_bj_arr, nu_p, k=1)[0]
+                d_bj = random.choices(d_bj_arr, nu_p, k=1)[0]
                 max_rate = min(b_dagger, self.data_states[i])
                 rewards[i] = min(d_bj, self.data_states[i])
                 if max_rate > rewards[i]:
                     losses[i] = max_rate - rewards[i]
             elif action in [4, 5, 6] and self.jammer_state == 1:
-                max_ra = self.current_d_ra if self.current_d_ra is not None else random.choices(
-                    dt_ra_arr, nu_p, k=1)[0]
+                max_ra = random.choices(dt_ra_arr, nu_p, k=1)[0]
                 idx = action - 4
                 rewards[i] = self.active_transmit(i, dt_ra_arr[idx])
                 if dt_ra_arr[idx] > max_ra:

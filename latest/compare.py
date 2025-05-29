@@ -4,7 +4,7 @@ import re
 import os
 
 # Define the directory containing the files
-directory = "log/test_nu"  # Matches your screenshot folder name
+directory = "log/test_nu1"  # Matches your screenshot folder name
 
 # Initialize dictionaries to store files for "Proposed Method" (normal) and "HTT"
 normal_files = {}
@@ -41,7 +41,6 @@ metrics = {
     "Avg_Reward": "Average Throughput (packets per time slot)",
     "Packet_Loss_Ratio": "Average Packet Loss Ratio",
     "Packet_Loss_By_Transmit": "Average Packet Loss by Transmission",
-    # "Energy_Efficiency": "Energy Efficiency (packets per joule)"  # Optional, uncomment if needed
 }
 
 # Load and process each file to extract final metrics
@@ -116,16 +115,16 @@ print("\nSummary of Final Results at Last Iteration:")
 print(summary_df)
 
 # Optional: Compute and add energy efficiency if Energy_used is present
-if "Energy_used" in df.columns:
-    for nu in nu_values:
-        for method in ["Proposed Method", "HTT"]:
-            if "Avg_Total_Reward" in results[method][nu] and "Energy_used" in df.columns:
-                final_energy = df.iloc[-1]["Energy_used"]
-                results[method][nu]["Energy_Efficiency"] = results[method][nu]["Avg_Total_Reward"] / final_energy
-                summary_df.loc[(summary_df["nu"] == nu) & (summary_df["Method"] == method), "Energy_Efficiency"] = results[method][nu]["Energy_Efficiency"]
-    metrics["Energy_Efficiency"] = "Energy Efficiency (packets per joule)"
-    print("\nSummary of Final Results with Energy Efficiency:")
-    print(summary_df)
+# if "Energy_used" in df.columns:
+#     for nu in nu_values:
+#         for method in ["Proposed Method", "HTT"]:
+#             if "Avg_Total_Reward" in results[method][nu] and "Energy_used" in df.columns:
+#                 final_energy = df.iloc[-1]["Energy_used"]
+#                 results[method][nu]["Energy_Efficiency"] = results[method][nu]["Avg_Total_Reward"] / final_energy
+#                 summary_df.loc[(summary_df["nu"] == nu) & (summary_df["Method"] == method), "Energy_Efficiency"] = results[method][nu]["Energy_Efficiency"]
+#     metrics["Energy_Efficiency"] = "Energy Efficiency (packets per joule)"
+#     print("\nSummary of Final Results with Energy Efficiency:")
+#     print(summary_df)
 
 # Plot each metric as a function of nu
 for metric_key, metric_label in metrics.items():

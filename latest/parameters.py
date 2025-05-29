@@ -1,4 +1,4 @@
-nu = 0.9  # Probability jammer is idle
+nu = 0.1  # Probability jammer is idle
 arrival_rate = 3  # Data arrival rate
 nu_p = [0.6, 0.2, 0.2]  # Jamming power level probabilities
 d_t = 4  # Packets per active transmission
@@ -10,10 +10,7 @@ d_queue_size = 10
 e_queue_size = 10
 b_dagger = 3  # Fixed backscatter rate
 num_users = 2 # Number of users
-num_channels = 1  # Single channel for TDMA
 num_actions = 7  # Actions: idle, transmit, harvest, backscatter, RA1, RA2, RA3
-# num_states = 2 * num_users * (6 ** (2 * num_users + 1))
-# num_states = 2 * num_users * 6 * 6 * 6 * 6
 num_states = num_users * 2 * (d_queue_size + 1) * (e_queue_size + 1) * 6 * 6
 # State: jammer state + time_slot + data/energy per user + avg other queue
 num_features = 1 + 1 + 2 * num_users + 2
